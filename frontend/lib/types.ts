@@ -76,8 +76,8 @@ export interface PracticeParagraph {
   text: string;
   targetWords: {
     word: string;
-    startIndex: number;
-    endIndex: number;
+    startIndex?: number;
+    endIndex?: number;
     phoneme: string;
   }[];
 }
