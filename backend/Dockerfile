@@ -1,57 +1,26 @@
+FROM node:22-alpine
 
-FROM node:20-slim AS builder
-
-
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    python3 \
-    make \
-    g++ \
-    && rm -rf /var/lib/apt/lists/*
-
+# Set working directory
 WORKDIR /app
 
+# Copy package.json and package-lock.json
+COPY package*.json ./
 
-COPY package.json package-lock.json ./
+# Install dependencies
+RUN npm install
+
+# Copy Prisma schema and generate client
 COPY prisma ./prisma/
-
-
-RUN npm ci
-
-
 RUN npx prisma generate
 
+# Copy the rest of the application code
+COPY . .
 
-COPY tsconfig.json ./
-COPY src ./src/
-
+# Build the TypeScript code
 RUN npx tsc
 
-FROM node:20-slim AS runner
-
-
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    openssl \
-    ca-certificates \
-    && rm -rf /var/lib/apt/lists/*
-
-WORKDIR /app
-
-
-COPY package.json package-lock.json ./
-COPY prisma ./prisma/
-
-RUN npm ci 
-
-RUN npx prisma generate
-
-
-COPY --from=builder /app/dist ./dist/
-
-RUN mkdir -p uploads
-
-ENV PORT=4000
-ENV NODE_ENV=production
-
+# Expose the port the app runs on
 EXPOSE 4000
 
+# Start the application
 CMD ["node", "dist/index.js"]
