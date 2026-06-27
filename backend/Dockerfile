@@ -40,7 +40,7 @@ WORKDIR /app
 COPY package.json package-lock.json ./
 COPY prisma ./prisma/
 
-RUN npm ci --omit=dev
+RUN npm ci 
 
 RUN npx prisma generate
 
