@@ -16,6 +16,9 @@ RUN npx prisma generate
 # Copy the rest of the application code
 COPY . .
 
+# Create uploads directory for temporary audio files
+RUN mkdir -p uploads
+
 # Build the TypeScript code
 RUN npx tsc
 
