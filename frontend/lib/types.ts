@@ -7,6 +7,9 @@ export interface Teacher {
   name: string;
   teacherCode: string;
   createdAt: string;
+  schoolName?: string;
+  principalEmail?: string;
+  principalName?: string;
 }
 
 export interface StudentProfile {
@@ -79,6 +82,9 @@ export interface PracticeParagraph {
     startIndex?: number;
     endIndex?: number;
     phoneme: string;
+    hindi?: string;
+    soundsLike?: string;
+    sounds_like?: string;
   }[];
 }
 
@@ -89,6 +95,8 @@ export interface WordResult {
   said?: string;
   phonemeFocus: string;
   explanation?: string;
+  hindiBreakdown?: string;
+  soundsLike?: string;
 }
 
 // Practice session results

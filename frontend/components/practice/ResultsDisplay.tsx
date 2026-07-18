@@ -1,7 +1,9 @@
 'use client';
 
+import { useState } from 'react';
 import { WordResult } from '@/lib/types';
 import { CheckCircle2, XCircle } from 'lucide-react';
+import { PhonemeAnimation } from './PhonemeAnimation';
 
 interface ResultsDisplayProps {
   results: WordResult[];
@@ -9,6 +11,8 @@ interface ResultsDisplayProps {
 }
 
 export function ResultsDisplay({ results, accuracy }: ResultsDisplayProps) {
+  const [activeAnimationIndex, setActiveAnimationIndex] = useState<number | null>(null);
+
   const getAccuracyTheme = (acc: number) => {
     if (acc >= 80) return { stroke: '#059669', text: '#059669', bg: 'rgba(5,150,105,0.08)', label: 'Excellent work! 🎉', sublabel: 'Your phonics is on point!' };
     if (acc >= 60) return { stroke: '#fbbf24', text: '#d97706', bg: 'rgba(251,191,36,0.08)', label: 'Good effort! 💪', sublabel: 'Keep practicing to reach 80%+' };
@@ -101,54 +105,86 @@ export function ResultsDisplay({ results, accuracy }: ResultsDisplayProps) {
           Word Results
         </h3>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          {results.map((result, index) => (
-            <div
-              key={index}
-              className="flex items-start gap-3 p-4 rounded-2xl transition-all duration-200 hover:scale-[1.015]"
-              style={
-                result.correct
-                  ? {
-                      background: 'rgba(240,253,244,0.8)',
-                      border: '1px solid #bbf7d0',
-                    }
-                  : {
-                      background: 'rgba(255,241,242,0.8)',
-                      border: '1px solid #fecdd3',
-                    }
-              }
-            >
-              <div className="mt-0.5 flex-shrink-0">
-                {result.correct ? (
-                  <CheckCircle2 className="w-5 h-5" style={{ color: '#059669' }} />
-                ) : (
-                  <XCircle className="w-5 h-5" style={{ color: '#fb7185' }} />
-                )}
-              </div>
-              <div className="flex-1 min-w-0">
-                <p
-                  className="font-bold text-sm"
-                  style={{ color: result.correct ? '#166534' : '#be123c', fontFamily: 'Inter, sans-serif' }}
-                >
-                  {result.word}
-                </p>
-                {!result.correct && result.said && (
-                  <p className="text-xs mt-0.5" style={{ color: '#e11d48' }}>
-                    You said: &ldquo;{result.said}&rdquo;
+          {results.map((result, index) => {
+            const isExpanded = activeAnimationIndex === index;
+            return (
+              <div
+                key={index}
+                className={`flex items-start gap-3 p-4 rounded-2xl transition-all duration-200 hover:scale-[1.015] ${
+                  isExpanded ? 'sm:col-span-2' : ''
+                }`}
+                style={
+                  result.correct
+                    ? {
+                        background: 'rgba(240,253,244,0.8)',
+                        border: '1px solid #bbf7d0',
+                      }
+                    : {
+                        background: 'rgba(255,241,242,0.8)',
+                        border: '1px solid #fecdd3',
+                      }
+                }
+              >
+                <div className="mt-0.5 flex-shrink-0">
+                  {result.correct ? (
+                    <CheckCircle2 className="w-5 h-5" style={{ color: '#059669' }} />
+                  ) : (
+                    <XCircle className="w-5 h-5" style={{ color: '#fb7185' }} />
+                  )}
+                </div>
+                <div className="flex-1 min-w-0 w-full">
+                  <div className="flex items-center justify-between gap-2 flex-wrap">
+                    <p
+                      className="font-bold text-sm"
+                      style={{ color: result.correct ? '#166534' : '#be123c', fontFamily: 'Inter, sans-serif' }}
+                    >
+                      {result.word}
+                    </p>
+                    
+                    {!result.correct && (
+                      <button
+                        onClick={() => setActiveAnimationIndex(isExpanded ? null : index)}
+                        className="text-xs font-semibold px-2.5 py-1 rounded-full transition-all duration-150 hover:scale-105"
+                        style={{
+                          backgroundColor: isExpanded ? '#0d9488' : 'rgba(13,148,136,0.08)',
+                          color: isExpanded ? '#ffffff' : '#0d9488',
+                        }}
+                      >
+                        {isExpanded ? 'Hide Mouth Guide' : 'Show Mouth Guide'}
+                      </button>
+                    )}
+                  </div>
+                  {!result.correct && result.said && (
+                    <p className="text-xs mt-0.5" style={{ color: '#e11d48' }}>
+                      You said: &ldquo;{result.said}&rdquo;
+                    </p>
+                  )}
+                  <p className="text-xs mt-0.5" style={{ color: '#6b7280' }}>
+                    Focus: /{result.phonemeFocus}/
                   </p>
-                )}
-                <p className="text-xs mt-0.5" style={{ color: '#6b7280' }}>
-                  Focus: /{result.phonemeFocus}/
-                </p>
-                {!result.correct && result.explanation && (
-                  <p className="text-xs mt-1 italic" style={{ color: '#9b1c1c', opacity: 0.8 }}>
-                    {result.explanation}
-                  </p>
-                )}
+                  {!result.correct && result.explanation && (
+                    <p className="text-xs mt-1 italic" style={{ color: '#9b1c1c', opacity: 0.8 }}>
+                      {result.explanation}
+                    </p>
+                  )}
+                  
+                  {!result.correct && isExpanded && (
+                    <div className="mt-4 pt-3 border-t border-rose-200/40 w-full">
+                      <PhonemeAnimation 
+                        word={result.word} 
+                        phonemeFocus={result.phonemeFocus} 
+                        hindiBreakdown={result.hindiBreakdown} 
+                        soundsLike={result.soundsLike} 
+                      />
+                    </div>
+                  )}
+                </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       </div>
     </div>
   );
 }
+

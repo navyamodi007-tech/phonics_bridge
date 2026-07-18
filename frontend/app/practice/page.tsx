@@ -114,6 +114,8 @@ export default function PracticePage() {
         said: spokenWord?.word || '???',
         phonemeFocus: targetWord.phoneme,
         explanation: isCorrect ? '' : analysisFeedback,
+        hindiBreakdown: targetWord.hindi || '',
+        soundsLike: targetWord.soundsLike || targetWord.sounds_like || '',
       };
     });
 

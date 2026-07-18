@@ -2,6 +2,7 @@ import "dotenv/config";
 import { PrismaClient } from "@prisma/client";
 import express, { Request, Response } from "express";
 import bcrypt from "bcrypt";
+import { exec } from "child_process";
 import { withAccelerate } from "@prisma/extension-accelerate"
 import * as sdk from 'microsoft-cognitiveservices-speech-sdk';
 import cron from 'node-cron'
@@ -49,13 +50,50 @@ const upload = multer({ storage });
 
 app.use(cors())
 app.use(express.json())
+
+// ── Google Translate TTS Proxy ──────────────────────────────────────────────
+// Proxies Google Translate's TTS endpoint so the browser receives the exact
+// same audio as google.com/translate, avoiding CORS restrictions.
+app.get('/tts', async (req: Request, res: Response): Promise<any> => {
+  const word = (req.query.word as string || '').trim();
+  const slow = req.query.slow === 'true';
+  if (!word) return res.status(400).json({ error: 'word is required' });
+
+  // ttsspeed: 0.75 = clearer normal speed, 0.18 = extra slow speed for learning
+  const speed = slow ? '0.18' : '0.75';
+  const url = `https://translate.google.com/translate_tts?ie=UTF-8&q=${encodeURIComponent(word)}&tl=en-IN&client=tw-ob&ttsspeed=${speed}`;
+
+  try {
+    const gtRes = await fetch(url, {
+      headers: {
+        // Google requires a browser-like User-Agent to serve audio
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/124.0 Safari/537.36',
+        'Referer': 'https://translate.google.com/',
+      },
+    });
+    if (!gtRes.ok) return res.status(gtRes.status).json({ error: 'TTS fetch failed' });
+    res.setHeader('Content-Type', 'audio/mpeg');
+    res.setHeader('Cache-Control', 'public, max-age=86400'); // cache for 1 day
+    if (gtRes.body) {
+      const { Readable } = await import('stream');
+      Readable.fromWeb(gtRes.body as any).pipe(res);
+    } else {
+      const buf = await gtRes.arrayBuffer();
+      res.send(Buffer.from(buf));
+    }
+  } catch (err) {
+    return res.status(500).json({ error: 'TTS proxy error', details: String(err) });
+  }
+});
+// ───────────────────────────────────────────────────────────────────────────
+
 //routes - signin , signup , pronounciation api(azure/sppechace), analytics  
 function generateTeacherCode(): string {
   return `TC${Math.random().toString(36).substring(2, 8).toUpperCase()}`;
 }
 
 app.post('/signin',async(req:Request,res:Response):Promise<any>=>{
-    const user_data:{email:string,password:string,teacher?:boolean}=req.body;
+    const user_data:{email:string,password:string,teacher?:boolean,school_name?:string,principal_email?:string,principal_name?:string}=req.body;
     try {
       const response=await prisma.user.findFirst({
         where:{email:user_data.email}
@@ -69,6 +107,9 @@ app.post('/signin',async(req:Request,res:Response):Promise<any>=>{
           "email":response.email,
           "teacher_code":response.teacher_code,
           "teacher":response.teacher,
+          "school_name":response.school_name,
+          "principal_email":response.principal_email,
+          "principal_name":response.principal_name,
           "msg":"You have signed in"
         })
       }
@@ -91,7 +132,10 @@ app.post('/signin',async(req:Request,res:Response):Promise<any>=>{
             email:user_data.email,
             password:hashedPassword,
             teacher_code:teacherCode,
-            teacher:user_data.teacher ?? false
+            teacher:user_data.teacher ?? false,
+            school_name:user_data.school_name ?? "",
+            principal_email:user_data.principal_email ?? "",
+            principal_name:user_data.principal_name ?? ""
           }
         })
         return res.status(200).json({
@@ -99,6 +143,9 @@ app.post('/signin',async(req:Request,res:Response):Promise<any>=>{
           "email":response.email,
           "teacher_code":response.teacher_code,
           "teacher":response.teacher,
+          "school_name":response.school_name,
+          "principal_email":response.principal_email,
+          "principal_name":response.principal_name,
           "msg":"User created"
         })
         //signup
@@ -230,14 +277,18 @@ function sysIns(context: string, adaptivePrompt: string) {
   Output should be in this format-
   {
     "text1": "this is the first paragraph",
-    "focus_words_1":[{"word": "word1", "phoneme": "phoneme1"}, ...],
+    "focus_words_1":[{"word": "word1", "phoneme": "phoneme1", "hindi": "हिन्दी phonetic breakdown", "sounds_like": "sounds · like · guide"}, ...],
     "text2": "this is the second paragraph",  
-    "focus_words_2":[{"word": "word2", "phoneme": "phoneme2"}, ...],
+    "focus_words_2":[{"word": "word2", "phoneme": "phoneme2", "hindi": "हिन्दी phonetic breakdown", "sounds_like": "sounds · like · guide"}, ...],
     "text3": "this is the third paragraph",   
-    "focus_words_3":[{"word": "word3", "phoneme": "phoneme3"}, ...]
+    "focus_words_3":[{"word": "word3", "phoneme": "phoneme3", "hindi": "हिन्दी phonetic breakdown", "sounds_like": "sounds · like · guide"}, ...]
   }
   No markdown in the output. Keep it strictly as valid JSON.
-  Also provide focus words for each text paragraph. For each focus word, specify both the "word" and its associated "phoneme" category (like "TH Sounds", "V/W Confusion", etc.).
+  Also provide focus words for each text paragraph. For each focus word, specify:
+  1. The English "word" itself.
+  2. Its associated "phoneme" category (like "TH Sounds", "V/W Confusion", etc.).
+  3. A Devanagari (Hindi) phonetic breakdown of the English word in the "hindi" field. Make sure it represents the pronunciation using Hindi script syllables separated by hyphens (e.g. for "challenges" output "चा-लें-जेज़", for "very" output "वे-री", for "thought" output "थॉट", for "water" output "वॉ-टर", for "really" output "री-ली").
+  4. A syllable-separated English phonetic breakdown in the "sounds_like" field. Use a Google Search style pronunciation spelling with syllables separated by dots (e.g. for "challenges" output "chal · uhn · juhz", for "very" output "veh · ree", for "thought" output "thawt", for "requires" output "ri · kwy · erz", for "weather" output "weh · dher").
   Also there is a user choice for the paragraph generation , if it empty string, then dont consider it.Each paragraph must be of 20 words.
   Each paragraph should contain two sentences.
   
@@ -379,11 +430,11 @@ function pronounciationSysIns(azure_output:any){
   You are Phonics Bridge Engine, an AI phonics assessment system.
   You receive structured pronunciation assessment output from an upstream pronunciation service after a student reads aloud.
   Your task is to analyze pronunciation errors and return a simplified phonics assessment.
-  You must output ONLY:
+  You must output a single JSON object in the following format:
   {
     "error_words": [],
     "error_types": [],
-    "analysis": ""
+    "analysis": "A child-friendly encouraging analysis of the reading performance (2-3 sentences)"
   }
   INPUT FORMAT
   Input comes in this structure:
@@ -911,6 +962,84 @@ app.get("/analytics", async (req: Request, res: Response): Promise<any> => {
   }
 });
 
+// GET /analytics/tag-scoring?userId=<id>&studentId=<id>&schoolName=<name>
+// Aggregates phoneme-level stats (attempts, errors, accuracy) for granular research analysis.
+app.get("/analytics/tag-scoring", async (req: Request, res: Response): Promise<any> => {
+  const userId = req.query.userId as string;
+  const studentId = req.query.studentId as string;
+  const schoolName = req.query.schoolName as string;
+
+  try {
+    let assessments: any[] = [];
+
+    if (studentId) {
+      assessments = await prisma.assessmentStudent.findMany({
+        where: { student_id: studentId },
+      });
+    } else if (userId) {
+      const teacher = await prisma.user.findUnique({
+        where: { id: userId }
+      });
+      if (teacher) {
+        assessments = await prisma.assessmentStudent.findMany({
+          where: { student: { code: teacher.teacher_code } },
+        });
+      }
+    } else if (schoolName) {
+      assessments = await prisma.assessmentStudent.findMany({
+        where: { student: { user: { school_name: schoolName } } },
+      });
+    } else {
+      return res.status(400).json({ msg: "studentId, userId, or schoolName query param is required" });
+    }
+
+    const phonemeStats: Record<string, { totalAttempts: number; errorCount: number; sumAccuracy: number }> = {};
+
+    for (const a of assessments) {
+      if (a.words) {
+        try {
+          const parsedWords = JSON.parse(a.words);
+          if (Array.isArray(parsedWords)) {
+            for (const w of parsedWords) {
+              const phonemes = w.phonemes || [];
+              for (const p of phonemes) {
+                const phName = (p.phoneme || "").toLowerCase().trim();
+                if (!phName) continue;
+
+                const accuracy = p.accuracyScore ?? 100;
+                if (!phonemeStats[phName]) {
+                  phonemeStats[phName] = { totalAttempts: 0, errorCount: 0, sumAccuracy: 0 };
+                }
+
+                phonemeStats[phName].totalAttempts++;
+                phonemeStats[phName].sumAccuracy += accuracy;
+                if (accuracy < 80) {
+                  phonemeStats[phName].errorCount++;
+                }
+              }
+            }
+          }
+        } catch (e) {
+          // ignore JSON parse errors
+        }
+      }
+    }
+
+    const report = Object.entries(phonemeStats).map(([phoneme, stats]) => ({
+      phoneme,
+      averageAccuracy: stats.totalAttempts > 0 ? Math.round((stats.sumAccuracy / stats.totalAttempts) * 10) / 10 : 0,
+      totalAttempts: stats.totalAttempts,
+      totalErrors: stats.errorCount,
+      errorRate: stats.totalAttempts > 0 ? Math.round((stats.errorCount / stats.totalAttempts) * 1000) / 10 : 0
+    })).sort((a, b) => b.totalErrors - a.totalErrors);
+
+    return res.status(200).json({ phonemes: report });
+  } catch (error) {
+    return res.status(500).json({ msg: "Something went wrong fetching tag-scoring analytics", error });
+  }
+});
+
+
 app.get("/sessions", async (req: Request, res: Response): Promise<any> => {
   const userId = req.query.userId as string;
   const studentId = req.query.studentId as string;
@@ -1039,10 +1168,12 @@ Always speak directly to the user. Provide practical pronunciation tips, mouth p
 // mail + scheduler 
 //rsounak55 gmail.com
 cron.schedule("*/30 * * * *",async()=>{
-  const response= await prisma.user.findMany({})
-  response.map(async(item:any)=>{
-    const name = item.email.split("@")[0]
-    const info = await transporter.sendMail({
+  try {
+    const response= await prisma.user.findMany({})
+    response.map(async(item:any)=>{
+      try {
+        const name = item.email.split("@")[0]
+        const info = await transporter.sendMail({
   from: '"Phonics Engine"',
   to:`${item.email}`,
   subject: `Reminder to take the assessment`,
@@ -1293,12 +1424,239 @@ cron.schedule("*/30 * * * *",async()=>{
 </body>
 </html>`
 });
-
-  })
+        console.log(`Reminder email sent successfully to ${item.email}`);
+      } catch (err) {
+        console.error(`Failed to send reminder email to ${item.email}:`, err);
+      }
+    })
+  } catch (err) {
+    console.error("Reminder cron job database error:", err);
+  }
 })
 
+// Helper function to generate and send monthly reports
+async function generateAndSendMonthlyReports(): Promise<void> {
+  console.log("Starting automated monthly principal report generation...");
+  const now = new Date();
+  const monthName = now.toLocaleString('default', { month: 'long' }) + " " + now.getFullYear();
 
+  try {
+    const teachers = await prisma.user.findMany({
+      where: { 
+        teacher: true,
+        school_name: { not: "" }
+      }
+    });
 
+    for (const teacher of teachers) {
+      try {
+        const students = await prisma.student.findMany({
+          where: { code: teacher.teacher_code },
+          include: {
+            assessment: {
+              where: {
+                time_created: {
+                  gte: new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000) // Last 30 days
+                }
+              }
+            }
+          }
+        });
+
+        if (students.length === 0) {
+          console.log(`No student activity for school "${teacher.school_name}" (Teacher: ${teacher.email}). Skipping report.`);
+          continue;
+        }
+
+        // Aggregate statistics
+        let totalSessions = 0;
+        let totalAccuracySum = 0;
+        let totalAccuracyCount = 0;
+        const schoolPhonemes: Record<string, { sum: number; count: number }> = {};
+        const studentDetails: any[] = [];
+
+        for (const student of students) {
+          let studentAccSum = 0;
+          let studentAccCount = 0;
+          const studentPhonemes: Record<string, { sum: number; count: number }> = {};
+
+          for (const assess of student.assessment) {
+            totalSessions++;
+            if (assess.accuracy !== null && assess.accuracy !== undefined) {
+              totalAccuracySum += assess.accuracy;
+              totalAccuracyCount++;
+              studentAccSum += assess.accuracy;
+              studentAccCount++;
+            }
+
+            if (assess.words) {
+              try {
+                const wordsList = JSON.parse(assess.words);
+                if (Array.isArray(wordsList)) {
+                  for (const w of wordsList) {
+                    if (w.phonemes && Array.isArray(w.phonemes)) {
+                      for (const p of w.phonemes) {
+                        const ph = (p.phoneme || '').toLowerCase().trim();
+                        if (!ph) continue;
+                        const score = p.accuracyScore ?? 100;
+                        
+                        // School level
+                        if (!schoolPhonemes[ph]) schoolPhonemes[ph] = { sum: 0, count: 0 };
+                        schoolPhonemes[ph].sum += score;
+                        schoolPhonemes[ph].count++;
+
+                        // Student level
+                        if (!studentPhonemes[ph]) studentPhonemes[ph] = { sum: 0, count: 0 };
+                        studentPhonemes[ph].sum += score;
+                        studentPhonemes[ph].count++;
+                      }
+                    }
+                  }
+                }
+              } catch (err) {
+                // Ignore parse errors
+              }
+            }
+          }
+
+          const avgStudentAccuracy = studentAccCount > 0 ? Math.round(studentAccSum / studentAccCount) : 0;
+          
+          // Identify student weaknesses (average accuracy < 80)
+          const needsPractice = Object.entries(studentPhonemes)
+            .filter(([_, stats]) => (stats.sum / stats.count) < 80)
+            .map(([ph]) => `/${ph}/`)
+            .slice(0, 3)
+            .join(', ');
+
+          studentDetails.push({
+            name: student.name,
+            rollNumber: student.roll_number || 'N/A',
+            sessions: student.assessment.length,
+            accuracy: avgStudentAccuracy,
+            needsPractice: needsPractice || 'None'
+          });
+        }
+
+        const overallAccuracy = totalAccuracyCount > 0 ? Math.round(totalAccuracySum / totalAccuracyCount) : 0;
+
+        // Phoneme rankings
+        const phonemeAverages = Object.entries(schoolPhonemes).map(([ph, stats]) => ({
+          phoneme: ph,
+          accuracy: Math.round(stats.sum / stats.count)
+        }));
+
+        const strengths = phonemeAverages
+          .filter(item => item.accuracy >= 80)
+          .sort((a, b) => b.accuracy - a.accuracy)
+          .slice(0, 3);
+
+        const weaknesses = phonemeAverages
+          .filter(item => item.accuracy < 80)
+          .sort((a, b) => a.accuracy - b.accuracy)
+          .slice(0, 3);
+
+        const reportPayload = {
+          schoolName: teacher.school_name,
+          principalName: teacher.principal_name || 'School Principal',
+          month: monthName,
+          totalStudents: students.length,
+          averageAccuracy: overallAccuracy,
+          strengths,
+          weaknesses,
+          students: studentDetails
+        };
+
+        const uploadDir = path.resolve(__dirname, '../uploads');
+        if (!fs.existsSync(uploadDir)) {
+          fs.mkdirSync(uploadDir, { recursive: true });
+        }
+
+        const jsonPath = path.join(uploadDir, `report_${teacher.id}.json`);
+        const pdfPath = path.join(uploadDir, `report_${teacher.id}.pdf`);
+
+        fs.writeFileSync(jsonPath, JSON.stringify(reportPayload, null, 2));
+
+        // Spawn python script to compile PDF
+        const scriptPath = path.resolve(__dirname, 'generate_pdf_report.py');
+        await new Promise<void>((resolve, reject) => {
+          exec(`python3 "${scriptPath}" "${jsonPath}" "${pdfPath}"`, (error, stdout, stderr) => {
+            if (error) {
+              console.error(`Python script failed for ${teacher.school_name}:`, error, stderr);
+              reject(error);
+            } else {
+              resolve();
+            }
+          });
+        });
+
+        // Send email to principal
+        const targetEmail = teacher.principal_email || teacher.email;
+        const mailOptions: any = {
+          from: `"Phonics Bridge Engine" <${process.env.MAIL_ID || 'noreply@phonicsflow.com'}>`,
+          to: targetEmail,
+          subject: `Monthly Phonics Progress Report - ${teacher.school_name} (${monthName})`,
+          html: `<div style="font-family: Arial, sans-serif; color: #1f2937; line-height: 1.6; max-width: 600px; margin: 0 auto; border: 1px solid #e2e8f0; border-radius: 12px; overflow: hidden;">
+            <div style="background-color: #0d9488; padding: 24px; text-align: center; color: white;">
+              <h2 style="margin: 0; font-size: 20px;">Monthly Phonics Progress Report</h2>
+              <p style="margin: 4px 0 0 0; font-size: 14px; opacity: 0.9;">${teacher.school_name}</p>
+            </div>
+            <div style="padding: 24px;">
+              <p>Dear Principal <b>${teacher.principal_name || 'Administrator'}</b>,</p>
+              <p>Please find attached the automated monthly Phonics Progress Report for your school, <b>${teacher.school_name}</b>, for the period ending <b>${monthName}</b>.</p>
+              <p>This report includes high-level statistics on student progress, cohort strengths, phonemes requiring targeted intervention, and individual student participation rates.</p>
+              <p style="margin-top: 24px;">Best regards,</p>
+              <p><b>Phonics Bridge Engine Dashboard Team</b></p>
+            </div>
+            <div style="background-color: #f8fafc; padding: 16px; text-align: center; font-size: 11px; color: #6b7280; border-top: 1px solid #e2e8f0;">
+              This is an automated notification. Please contact ${teacher.email} for details about this class.
+            </div>
+          </div>`,
+          attachments: [
+            {
+              filename: `Phonics_Report_${monthName.replace(/\s+/g, '_')}.pdf`,
+              path: pdfPath
+            }
+          ]
+        };
+
+        if (teacher.principal_email && teacher.email) {
+          mailOptions.cc = teacher.email;
+        }
+
+        await transporter.sendMail(mailOptions);
+        console.log(`Report successfully emailed to ${targetEmail}`);
+
+        // Cleanup files
+        if (fs.existsSync(jsonPath)) fs.unlinkSync(jsonPath);
+        if (fs.existsSync(pdfPath)) fs.unlinkSync(pdfPath);
+
+      } catch (err) {
+        console.error(`Failed to process report for teacher ${teacher.email}:`, err);
+      }
+    }
+  } catch (err) {
+    console.error("Failed to fetch teachers for monthly reports:", err);
+  }
+}
+
+// REST endpoint to trigger report generation manually
+app.get('/trigger-monthly-reports', async (req: Request, res: Response): Promise<any> => {
+  try {
+    await generateAndSendMonthlyReports();
+    return res.status(200).json({ success: true, msg: "Monthly reports triggered and sent successfully." });
+  } catch (err: any) {
+    return res.status(500).json({ success: false, msg: "Failed to trigger reports", error: err.message });
+  }
+});
+
+// Schedule monthly principal reports on the 1st of every month at midnight
+cron.schedule("0 0 1 * *", async () => {
+  try {
+    await generateAndSendMonthlyReports();
+  } catch (err) {
+    console.error("Cron scheduled monthly reports error:", err);
+  }
+});
 
 const PORT = process.env.PORT || 4000;
 app.listen(PORT, () => {

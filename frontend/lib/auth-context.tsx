@@ -53,7 +53,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     email: string,
     password: string,
     role: UserRole,
-    extraData?: { name?: string; roleNumber?: string; teacherCode?: string }
+    extraData?: { 
+      name?: string; 
+      roleNumber?: string; 
+      teacherCode?: string;
+      schoolName?: string;
+      principalEmail?: string;
+      principalName?: string;
+    }
   ) => {
     try {
       if (role === 'teacher' || role === 'learner') {
@@ -62,7 +69,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           headers: {
             'Content-Type': 'application/json',
           },
-          body: JSON.stringify({ email, password, teacher: role === 'teacher' }),
+          body: JSON.stringify({ 
+            email, 
+            password, 
+            teacher: role === 'teacher',
+            school_name: extraData?.schoolName || '',
+            principal_email: extraData?.principalEmail || '',
+            principal_name: extraData?.principalName || '',
+          }),
         });
 
         if (!response.ok) {
@@ -80,6 +94,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             email: data.email,
             name: extraData?.name || data.email.split('@')[0],
             teacherCode: data.teacher_code,
+            schoolName: data.school_name,
+            principalEmail: data.principal_email,
+            principalName: data.principal_name,
             createdAt: new Date().toISOString(),
           } : undefined,
           studentData: !data.teacher ? {
@@ -195,6 +212,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           email: data.email,
           name: data.email.split('@')[0],
           teacherCode: data.teacher_code,
+          schoolName: data.school_name,
+          principalEmail: data.principal_email,
+          principalName: data.principal_name,
           createdAt: new Date().toISOString(),
         } : undefined,
         studentData: !data.teacher ? {

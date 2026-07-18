@@ -1,7 +1,8 @@
 'use client';
 
 import { useState } from 'react';
-import { Calendar, ChevronDown, ChevronUp, Trophy, AlertTriangle, Sparkles } from 'lucide-react';
+import { Calendar, ChevronDown, ChevronUp, Trophy, AlertTriangle, Sparkles, Smile } from 'lucide-react';
+import { PhonemeAnimation } from '../practice/PhonemeAnimation';
 
 interface Phoneme {
   phoneme: string;
@@ -27,6 +28,42 @@ interface Session {
   time_created: string;
 }
 
+const cleanAnalysisText = (analysis: string | null): string => {
+  if (!analysis) return "Excellent job! No specific pronunciation errors were detected. Keep practicing and building your reading skills!";
+  
+  // Try to remove markdown json codeblock wrappers if they exist
+  let cleanStr = analysis.trim();
+  if (cleanStr.startsWith("```")) {
+    // Remove opening ```json or ```
+    cleanStr = cleanStr.replace(/^```(?:json)?\s*/i, "");
+    // Remove closing ```
+    cleanStr = cleanStr.replace(/\s*```$/, "");
+    cleanStr = cleanStr.trim();
+  }
+
+  try {
+    const parsed = JSON.parse(cleanStr);
+    if (parsed && typeof parsed === 'object') {
+      let text = "";
+      if (typeof parsed.analysis === 'string') text = parsed.analysis.trim();
+      else if (typeof parsed.feedback === 'string') text = parsed.feedback.trim();
+      else if (typeof parsed.explanation === 'string') text = parsed.explanation.trim();
+      
+      if (!text) {
+        return "Excellent job! No specific pronunciation errors were detected. Keep practicing and building your reading skills!";
+      }
+      return text;
+    }
+  } catch (e) {
+    // Not valid JSON, return the cleaned string
+  }
+
+  if (!cleanStr) {
+    return "Excellent job! No specific pronunciation errors were detected. Keep practicing and building your reading skills!";
+  }
+  return cleanStr;
+};
+
 interface PreviousSessionsProps {
   sessions: Session[];
   isLoading: boolean;
@@ -35,6 +72,7 @@ interface PreviousSessionsProps {
 
 export function PreviousSessions({ sessions, isLoading, title = "Previous Practice Sessions" }: PreviousSessionsProps) {
   const [expandedSessionId, setExpandedSessionId] = useState<string | null>(null);
+  const [sessionAnimWords, setSessionAnimWords] = useState<Record<string, string>>({});
 
   const toggleExpand = (id: string) => {
     setExpandedSessionId(expandedSessionId === id ? null : id);
@@ -260,26 +298,7 @@ export function PreviousSessions({ sessions, isLoading, title = "Previous Practi
                     </div>
                   )}
 
-                  {/* AI Feedback & Analysis */}
-                  {session.analysis && (
-                    <div className="space-y-2 animate-fade-in">
-                      <h4 className="text-xs font-semibold uppercase tracking-wider flex items-center gap-1.5" style={{ color: '#6b7280' }}>
-                        <Sparkles className="w-3.5 h-3.5 text-amber-500" />
-                        AI Speech Feedback
-                      </h4>
-                      <div
-                        className="rounded-2xl p-4 text-sm leading-relaxed border"
-                        style={{
-                          background: 'linear-gradient(135deg, rgba(13,148,136,0.03), rgba(251,113,133,0.02))',
-                          borderColor: 'rgba(13,148,136,0.15)',
-                          color: '#374151',
-                          whiteSpace: 'pre-line'
-                        }}
-                      >
-                        {session.analysis}
-                      </div>
-                    </div>
-                  )}
+
 
                   {/* Error Sounds summary */}
                   {parsedErrors.length > 0 && (
@@ -299,6 +318,46 @@ export function PreviousSessions({ sessions, isLoading, title = "Previous Practi
                           </span>
                         ))}
                       </div>
+                    </div>
+                  )}
+
+                  {/* See this phonics correction in animation */}
+                  {parsedWords.some(w => w.accuracyScore < 80 || (w.errorType && w.errorType !== 'None')) && (
+                    <div className="space-y-2 pt-2 border-t border-dashed border-gray-200">
+                      <h4 className="text-xs font-semibold uppercase tracking-wider flex items-center gap-1.5" style={{ color: '#6b7280' }}>
+                        <Smile className="w-3.5 h-3.5 text-teal-600" />
+                        See correction in animation
+                      </h4>
+                      <div className="flex flex-wrap gap-2">
+                        {parsedWords
+                          .filter(w => w.accuracyScore < 80 || (w.errorType && w.errorType !== 'None'))
+                          .map((wObj, wIdx) => {
+                            const activeWord = sessionAnimWords[session.id];
+                            const isActive = activeWord === wObj.word;
+                            return (
+                              <button
+                                key={wIdx}
+                                onClick={() => setSessionAnimWords({
+                                  ...sessionAnimWords,
+                                  [session.id]: isActive ? '' : wObj.word
+                                })}
+                                className="text-xs font-semibold px-3 py-1.5 rounded-full border transition-all duration-150 hover:scale-105 flex items-center gap-1.5"
+                                style={{
+                                  backgroundColor: isActive ? '#0d9488' : 'rgba(13,148,136,0.06)',
+                                  borderColor: isActive ? '#0d9488' : 'rgba(13,148,136,0.15)',
+                                  color: isActive ? '#ffffff' : '#0d9488',
+                                }}
+                              >
+                                🎥 {wObj.word}
+                              </button>
+                            );
+                          })}
+                      </div>
+                      {sessionAnimWords[session.id] && (
+                        <div className="mt-3 p-3 bg-white rounded-2xl border border-gray-100 shadow-sm animate-fade-in">
+                          <PhonemeAnimation word={sessionAnimWords[session.id]} />
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>

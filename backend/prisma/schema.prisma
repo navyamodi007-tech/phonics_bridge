@@ -17,6 +17,9 @@ model User{
   password String 
   teacher Boolean @default(false)
   teacher_code String @unique
+  school_name String @default("")
+  principal_email String @default("")
+  principal_name String @default("")
   time_created DateTime @default(now())
   assessment Assessment[]
   student Student[]

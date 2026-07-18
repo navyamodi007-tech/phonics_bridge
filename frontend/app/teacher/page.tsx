@@ -7,6 +7,7 @@ import { BASE_API_URL } from '@/lib/config';
 import { Button } from '@/components/ui/button';
 import { Copy, BookOpen, Users, Check, GraduationCap, ChevronRight } from 'lucide-react';
 import { PreviousSessions } from '@/components/dashboard/PreviousSessions';
+import { OnboardingModal } from '@/components/ui/OnboardingModal';
 
 export default function TeacherDashboard() {
   const router = useRouter();
@@ -16,6 +17,16 @@ export default function TeacherDashboard() {
   const [sessions, setSessions] = useState<any[]>([]);
   const [loadingSessions, setLoadingSessions] = useState(true);
   const [loadingStudents, setLoadingStudents] = useState(true);
+  const [isOnboardingOpen, setIsOnboardingOpen] = useState(false);
+
+  useEffect(() => {
+    if (!isLoading && user?.role === 'teacher') {
+      const onboarded = localStorage.getItem('phonics_bridge_onboarded_teacher');
+      if (onboarded !== 'true') {
+        setIsOnboardingOpen(true);
+      }
+    }
+  }, [user, isLoading]);
 
   useEffect(() => {
     if (!isLoading && (!user || user.role !== 'teacher')) {
@@ -313,6 +324,9 @@ export default function TeacherDashboard() {
       <div className="animate-fade-in-up delay-300 pt-4" style={{ borderTop: '1px solid #ece7df' }}>
         <PreviousSessions sessions={sessions} isLoading={loadingSessions} title="Your Own Practice Sessions" />
       </div>
+
+      {/* Onboarding walk-through modal */}
+      <OnboardingModal role="teacher" isOpen={isOnboardingOpen} onClose={() => setIsOnboardingOpen(false)} />
     </div>
   );
 }

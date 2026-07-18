@@ -12,6 +12,7 @@ import { SoundsFixed } from '@/components/dashboard/SoundsFixed';
 import { AccuracyChart } from '@/components/dashboard/AccuracyChart';
 import { WordsList } from '@/components/dashboard/WordsList';
 import { PreviousSessions } from '@/components/dashboard/PreviousSessions';
+import { OnboardingModal } from '@/components/ui/OnboardingModal';
 import Link from 'next/link';
 import { BookOpen, ArrowRight, Mic, BarChart2, Target, Users, Sparkles, Play } from 'lucide-react';
 
@@ -259,6 +260,16 @@ export default function RootPage() {
   const [improvedWords, setImprovedWords] = useState<any[]>([]);
   const [sessions, setSessions] = useState<any[]>([]);
   const [loadingStats, setLoadingStats] = useState(true);
+  const [isOnboardingOpen, setIsOnboardingOpen] = useState(false);
+
+  useEffect(() => {
+    if (!isLoading && isAuthenticated && (user?.role === 'student' || user?.role === 'learner')) {
+      const onboarded = localStorage.getItem('phonics_bridge_onboarded_student');
+      if (onboarded !== 'true') {
+        setIsOnboardingOpen(true);
+      }
+    }
+  }, [user, isLoading, isAuthenticated]);
 
   useEffect(() => {
     if (!isLoading) {
@@ -396,6 +407,9 @@ export default function RootPage() {
       <PreviousSessions sessions={sessions} isLoading={loadingStats} />
       <SoundsFixed soundsFixed={fixedSounds} />
       <Footer />
+      
+      {/* Student Onboarding modal popup */}
+      <OnboardingModal role="student" isOpen={isOnboardingOpen} onClose={() => setIsOnboardingOpen(false)} />
     </div>
   );
 }

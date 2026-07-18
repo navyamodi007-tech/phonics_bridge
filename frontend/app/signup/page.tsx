@@ -23,6 +23,11 @@ export default function SignUpPage() {
   const [roleNumber, setRoleNumber] = useState('');
   const [teacherCode, setTeacherCode] = useState('');
 
+  // Principal Details (for Teacher role)
+  const [schoolName, setSchoolName] = useState('');
+  const [principalName, setPrincipalName] = useState('');
+  const [principalEmail, setPrincipalEmail] = useState('');
+
   useEffect(() => {
     if (!isLoading && isAuthenticated && user) {
       if (user.role === 'teacher') {
@@ -53,6 +58,11 @@ export default function SignUpPage() {
       if (!password.trim()) { setError('Please enter a password'); return; }
       if (password !== confirmPassword) { setError('Passwords do not match'); return; }
       if (password.length < 6) { setError('Password must be at least 6 characters'); return; }
+      if (role === 'teacher') {
+        if (!schoolName.trim()) { setError('Please enter your school name'); return; }
+        if (!principalName.trim()) { setError('Please enter the principal\'s name'); return; }
+        if (!principalEmail.trim()) { setError('Please enter the principal\'s email'); return; }
+      }
     } else {
       if (!trimmedRoleNumber) { setError('Please enter your role number'); return; }
       if (!trimmedTeacherCode) { setError('Please enter your teacher code'); return; }
@@ -62,7 +72,12 @@ export default function SignUpPage() {
 
     try {
       const metadata = (role === 'teacher' || role === 'learner')
-        ? { name: trimmedName }
+        ? { 
+            name: trimmedName,
+            schoolName: role === 'teacher' ? schoolName.trim() : undefined,
+            principalEmail: role === 'teacher' ? principalEmail.trim() : undefined,
+            principalName: role === 'teacher' ? principalName.trim() : undefined,
+          }
         : { name: trimmedName, roleNumber: trimmedRoleNumber, teacherCode: trimmedTeacherCode };
 
       await signUp(trimmedEmail, password, role, metadata);
@@ -201,6 +216,64 @@ export default function SignUpPage() {
 
             {role === 'teacher' || role === 'learner' ? (
               <>
+                {role === 'teacher' && (
+                  <>
+                    <div className="space-y-1.5 animate-fade-in">
+                      <label
+                        htmlFor="signup-school"
+                        className="text-sm font-semibold block"
+                        style={{ color: '#374151', fontFamily: 'Inter, sans-serif' }}
+                      >
+                        School Name
+                      </label>
+                      <Input
+                        id="signup-school"
+                        type="text"
+                        placeholder="e.g. Modinagar Primary School"
+                        value={schoolName}
+                        onChange={(e) => setSchoolName(e.target.value)}
+                        disabled={loading}
+                        required
+                      />
+                    </div>
+                    <div className="space-y-1.5 animate-fade-in">
+                      <label
+                        htmlFor="signup-principal-name"
+                        className="text-sm font-semibold block"
+                        style={{ color: '#374151', fontFamily: 'Inter, sans-serif' }}
+                      >
+                        Principal Name
+                      </label>
+                      <Input
+                        id="signup-principal-name"
+                        type="text"
+                        placeholder="e.g. Dr. Narendra Modi"
+                        value={principalName}
+                        onChange={(e) => setPrincipalName(e.target.value)}
+                        disabled={loading}
+                        required
+                      />
+                    </div>
+                    <div className="space-y-1.5 animate-fade-in">
+                      <label
+                        htmlFor="signup-principal-email"
+                        className="text-sm font-semibold block"
+                        style={{ color: '#374151', fontFamily: 'Inter, sans-serif' }}
+                      >
+                        Principal Email
+                      </label>
+                      <Input
+                        id="signup-principal-email"
+                        type="email"
+                        placeholder="principal@school.com"
+                        value={principalEmail}
+                        onChange={(e) => setPrincipalEmail(e.target.value)}
+                        disabled={loading}
+                        required
+                      />
+                    </div>
+                  </>
+                )}
                 <div className="space-y-1.5">
                   <label
                     htmlFor="signup-email"
