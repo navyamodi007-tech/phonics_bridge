@@ -1,0 +1,418 @@
+<!doctype html>
+<html lang="en" data-resolution="landscape">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=1920, height=1080" />
+    <title>PhonicsFlow — How it works</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&family=Inter:wght@400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script>
+    <style>
+      * { margin: 0; padding: 0; box-sizing: border-box; }
+      html, body { width: 1920px; height: 1080px; overflow: hidden; background: #fdf8f0; }
+      body { font-family: "Inter", system-ui, sans-serif; color: #1f2937; }
+
+      #root { position: relative; width: 1920px; height: 1080px; overflow: hidden; }
+
+      .clip { position: absolute; inset: 0; }
+      .scene-inner { position: absolute; inset: 0; }
+
+      .display { font-family: "Outfit", system-ui, sans-serif; }
+
+      /* Persistent background */
+      #bg-fill { position: absolute; inset: 0; background: #fdf8f0; }
+      #bg-fill::before {
+        content: ""; position: absolute; top: -260px; right: -200px;
+        width: 720px; height: 720px; border-radius: 50%;
+        background: radial-gradient(circle, rgba(13,148,136,0.10) 0%, rgba(13,148,136,0.02) 60%, transparent 75%);
+      }
+      #bg-fill::after {
+        content: ""; position: absolute; bottom: -280px; left: -180px;
+        width: 640px; height: 640px; border-radius: 50%;
+        background: radial-gradient(circle, rgba(251,191,36,0.10) 0%, transparent 70%);
+      }
+
+      .center-col {
+        position: absolute; inset: 0;
+        display: flex; flex-direction: column; align-items: center; justify-content: center;
+        text-align: center;
+      }
+
+      /* Step label chip (top-left) */
+      .step-chip {
+        position: absolute; top: 90px; left: 120px;
+        display: inline-flex; align-items: center; gap: 14px;
+        padding: 16px 30px; border-radius: 999px;
+        background: rgba(13,148,136,0.10); border: 1px solid rgba(13,148,136,0.22);
+      }
+      .step-num {
+        display: inline-flex; align-items: center; justify-content: center;
+        width: 44px; height: 44px; border-radius: 50%;
+        background: #0d9488; color: #fff;
+        font-family: "Outfit"; font-weight: 800; font-size: 24px;
+      }
+      .step-text { font-family: "Outfit"; font-weight: 700; font-size: 34px; color: #0f766e; }
+
+      /* Glass card */
+      .glass {
+        background: rgba(255,255,255,0.78);
+        backdrop-filter: blur(12px);
+        border: 1px solid rgba(236,231,223,0.9);
+        border-radius: 30px;
+        box-shadow: 0 20px 60px rgba(23,32,50,0.08);
+      }
+
+      /* Scene 1 — hook */
+      .badge {
+        display: inline-flex; align-items: center; gap: 12px;
+        padding: 14px 28px; border-radius: 999px;
+        background: rgba(13,148,136,0.10); border: 1px solid rgba(13,148,136,0.20);
+        color: #0d9488; font-weight: 600; font-size: 28px;
+      }
+      .wordmark { font-family: "Outfit"; font-weight: 800; font-size: 148px; letter-spacing: -0.03em; line-height: 1; }
+      .wordmark .ink { color: #1a2332; }
+      .wordmark .teal { color: #0d9488; }
+      #s1-underline {
+        width: 520px; height: 8px; border-radius: 999px; transform-origin: left center;
+        background: linear-gradient(90deg, #0d9488, #fbbf24);
+        margin-top: 22px;
+      }
+      .tagline { font-family: "Outfit"; font-weight: 700; font-size: 52px; line-height: 1.18; }
+      .tagline .l1 { color: #1f2937; }
+      .tagline .l2 { color: #0d9488; }
+
+      /* Scene 2 — read aloud */
+      .practice-card { width: 1180px; padding: 70px 80px; }
+      .practice-kicker { font-family:"Outfit"; font-weight:700; color:#6b7280; font-size: 28px; letter-spacing: .08em; text-transform: uppercase; margin-bottom: 30px; }
+      .sentence { font-family:"Outfit"; font-weight:700; font-size: 68px; line-height: 1.35; color:#1f2937; }
+      .pill {
+        display: inline-block; padding: 4px 22px; border-radius: 18px;
+        background: #ccfbf1; color: #0f766e; box-shadow: inset 0 0 0 2px rgba(13,148,136,0.35);
+      }
+      .caption { font-family:"Inter"; font-weight:500; font-size: 32px; color:#6b7280; margin-top: 46px; }
+
+      /* Scene 3 — mic */
+      .mic-wrap { position: relative; width: 360px; height: 360px; display:flex; align-items:center; justify-content:center; }
+      .mic-btn {
+        position: relative; z-index: 3;
+        width: 200px; height: 200px; border-radius: 50%;
+        background: linear-gradient(135deg, #0d9488, #0f766e);
+        display: flex; align-items: center; justify-content: center;
+        box-shadow: 0 20px 50px rgba(13,148,136,0.45);
+      }
+      .pulse-ring {
+        position: absolute; top: 50%; left: 50%; width: 200px; height: 200px;
+        border-radius: 50%; border: 4px solid rgba(13,148,136,0.5);
+        transform: translate(-50%, -50%);
+      }
+      #tap-dot {
+        position: absolute; z-index: 4; right: 78px; bottom: 70px;
+        width: 60px; height: 60px; border-radius: 50%;
+        background: rgba(31,35,50,0.9); box-shadow: 0 6px 18px rgba(0,0,0,0.25);
+        border: 3px solid #fff;
+      }
+
+      /* Scene 4 — accuracy */
+      .ring-num { font-family:"Outfit"; font-weight:800; font-size: 128px; fill: #059669; }
+      .result-title { font-family:"Outfit"; font-weight:800; font-size: 68px; color:#059669; }
+      .result-sub { font-family:"Inter"; font-weight:500; font-size: 34px; color:#6b7280; margin-top: 10px; }
+
+      /* Scene 5 — weak sounds */
+      .ws-card { width: 760px; padding: 54px 60px; }
+      .ws-head { font-family:"Outfit"; font-weight:800; font-size: 42px; color:#1f2937; margin-bottom: 34px; }
+      .ws-row { display:flex; align-items:center; justify-content:space-between; padding: 20px 0; border-top: 1px solid #ece7df; }
+      .ws-left { display:flex; align-items:center; gap: 20px; }
+      .ws-dot { width: 20px; height: 20px; border-radius: 50%; }
+      .ws-sound { font-family:"Outfit"; font-weight:700; font-size: 40px; color:#374151; }
+      .ws-err { font-family:"Inter"; font-weight:500; font-size: 32px; color:#6b7280; }
+      .streak-card { width: 380px; padding: 48px 40px; text-align:center; }
+      .streak-label { font-family:"Inter"; font-weight:600; font-size: 30px; color:#6b7280; }
+      .streak-num { font-family:"Outfit"; font-weight:800; font-size: 120px; color:#1f2937; line-height: 1; }
+      .streak-days { font-family:"Inter"; font-weight:600; font-size: 30px; color:#059669; }
+
+      /* Scene 6 — teachers + outro */
+      .teacher-line { font-family:"Outfit"; font-weight:800; font-size: 62px; color:#1f2937; }
+      .stu-row { display:flex; gap: 34px; margin-top: 50px; }
+      .stu-card { width: 300px; padding: 34px; text-align:center; }
+      .stu-avatar { width: 84px; height: 84px; border-radius: 26px; margin: 0 auto 20px; display:flex; align-items:center; justify-content:center; color:#fff; font-family:"Outfit"; font-weight:800; font-size: 34px; background: linear-gradient(135deg,#0d9488,#059669); }
+      .stu-name { font-family:"Outfit"; font-weight:700; font-size: 34px; color:#1f2937; }
+      .stu-meta { font-family:"Inter"; font-weight:500; font-size: 28px; color:#6b7280; margin-top: 6px; }
+      .cta-pill {
+        display:inline-flex; align-items:center; gap:14px;
+        padding: 22px 48px; border-radius: 999px; background:#0d9488; color:#fff;
+        font-family:"Outfit"; font-weight:800; font-size: 40px;
+        box-shadow: 0 14px 40px rgba(13,148,136,0.42);
+      }
+      .outro-tag { font-family:"Inter"; font-weight:500; font-size: 36px; color:#6b7280; margin-top: 26px; }
+      .outro-mark { font-family:"Outfit"; font-weight:800; font-size: 64px; letter-spacing:-0.02em; }
+    </style>
+  </head>
+
+  <body>
+    <div
+      id="root"
+      data-composition-id="main"
+      data-start="0"
+      data-duration="21"
+      data-width="1920"
+      data-height="1080"
+      data-fps="30"
+    >
+      <!-- Persistent background -->
+      <div id="bg" class="clip" data-start="0" data-duration="21" data-track-index="1">
+        <div id="bg-fill"></div>
+      </div>
+
+      <!-- ============ SCENE 1 — HOOK ============ -->
+      <section id="s1" class="clip" data-start="0" data-duration="3.0" data-track-index="2">
+        <div id="s1-inner" class="scene-inner">
+          <div class="center-col">
+            <div id="s1-badge" class="badge">✨ AI-Powered Phonics Practice</div>
+            <div id="s1-wordmark" class="wordmark display" style="margin-top: 40px;">
+              <span class="ink">Phonics</span><span class="teal">Flow</span>
+            </div>
+            <div id="s1-underline"></div>
+            <div class="tagline display" style="margin-top: 40px;">
+              <div id="s1-tag1" class="l1">Stronger Sounds.</div>
+              <div id="s1-tag2" class="l2">Brighter Futures.</div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============ SCENE 2 — READ ALOUD ============ -->
+      <section id="s2" class="clip" data-start="2.8" data-duration="4.0" data-track-index="3">
+        <div id="s2-inner" class="scene-inner">
+          <div id="s2-chip" class="step-chip">
+            <span class="step-num">1</span><span class="step-text">Read aloud</span>
+          </div>
+          <div class="center-col">
+            <div id="s2-card" class="glass practice-card">
+              <div class="practice-kicker">Today's practice</div>
+              <div class="sentence">
+                The <span id="s2-pill1" class="pill">thirsty</span> rabbit ran through the <span id="s2-pill2" class="pill">thick</span> grass.
+              </div>
+            </div>
+            <div id="s2-cap" class="caption">Read the sentence out loud 📖</div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============ SCENE 3 — TAP THE MIC ============ -->
+      <section id="s3" class="clip" data-start="6.6" data-duration="3.4" data-track-index="2">
+        <div id="s3-inner" class="scene-inner">
+          <div id="s3-chip" class="step-chip">
+            <span class="step-num">2</span><span class="step-text">Tap the mic</span>
+          </div>
+          <div class="center-col">
+            <div class="mic-wrap">
+              <div id="s3-ring1" class="pulse-ring"></div>
+              <div id="s3-ring2" class="pulse-ring"></div>
+              <div id="s3-mic" class="mic-btn">
+                <svg width="92" height="92" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <rect x="9" y="2" width="6" height="12" rx="3" fill="#fff" stroke="#fff"></rect>
+                  <path d="M5 10a7 7 0 0 0 14 0"></path>
+                  <line x1="12" y1="17" x2="12" y2="22"></line>
+                  <line x1="8" y1="22" x2="16" y2="22"></line>
+                </svg>
+              </div>
+              <div id="tap-dot"></div>
+            </div>
+            <div id="s3-cap" class="caption">Tap and read — we'll listen 🎤</div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============ SCENE 4 — INSTANT FEEDBACK ============ -->
+      <section id="s4" class="clip" data-start="9.8" data-duration="4.6" data-track-index="3">
+        <div id="s4-inner" class="scene-inner">
+          <div id="s4-chip" class="step-chip">
+            <span class="step-num">3</span><span class="step-text">Instant feedback</span>
+          </div>
+          <div class="center-col">
+            <div id="s4-ring" style="width: 360px; height: 360px;">
+              <svg width="360" height="360" viewBox="0 0 360 360">
+                <circle cx="180" cy="180" r="150" fill="none" stroke="#e8eae7" stroke-width="26"></circle>
+                <circle id="ring-fg" cx="180" cy="180" r="150" fill="none" stroke="#059669" stroke-width="26"
+                  stroke-linecap="round" transform="rotate(-90 180 180)"
+                  stroke-dasharray="942.48" stroke-dashoffset="942.48"></circle>
+                <text id="ring-num" class="ring-num" x="180" y="212" text-anchor="middle">0%</text>
+              </svg>
+            </div>
+            <div id="s4-title" class="result-title" style="margin-top: 30px;">Excellent work! 🎉</div>
+            <div id="s4-sub" class="result-sub">Your phonics is on point!</div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============ SCENE 5 — WEAK SOUNDS ============ -->
+      <section id="s5" class="clip" data-start="14.2" data-duration="3.6" data-track-index="2">
+        <div id="s5-inner" class="scene-inner">
+          <div id="s5-chip" class="step-chip">
+            <span class="step-num">4</span><span class="step-text">Know what to fix</span>
+          </div>
+          <div class="center-col" style="flex-direction: row; gap: 44px;">
+            <div id="s5-card" class="glass ws-card">
+              <div class="ws-head">Weak Sounds</div>
+              <div id="ws-r1" class="ws-row" style="border-top: none;">
+                <div class="ws-left"><span class="ws-dot" style="background:#ef4444;"></span><span class="ws-sound">/th/</span></div>
+                <span class="ws-err">7 errors</span>
+              </div>
+              <div id="ws-r2" class="ws-row">
+                <div class="ws-left"><span class="ws-dot" style="background:#f59e0b;"></span><span class="ws-sound">/r/</span></div>
+                <span class="ws-err">4 errors</span>
+              </div>
+              <div id="ws-r3" class="ws-row">
+                <div class="ws-left"><span class="ws-dot" style="background:#10b981;"></span><span class="ws-sound">/v/</span></div>
+                <span class="ws-err">2 errors</span>
+              </div>
+            </div>
+            <div id="s5-streak" class="glass streak-card">
+              <div class="streak-label">Practice Streak</div>
+              <div class="streak-num display" style="margin-top: 14px;">🔥 12</div>
+              <div class="streak-days">days — keep it up!</div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============ SCENE 6 — TEACHERS + OUTRO ============ -->
+      <section id="s6" class="clip" data-start="17.6" data-duration="3.4" data-track-index="3">
+        <div id="s6-inner" class="scene-inner">
+          <div class="center-col">
+            <div id="s6-line" class="teacher-line display">Teachers see the whole class.</div>
+            <div class="stu-row">
+              <div id="s6-c1" class="glass stu-card">
+                <div class="stu-avatar">AR</div><div class="stu-name">Aarav</div><div class="stu-meta">🔥 9 · 84%</div>
+              </div>
+              <div id="s6-c2" class="glass stu-card">
+                <div class="stu-avatar">DI</div><div class="stu-name">Diya</div><div class="stu-meta">🔥 12 · 91%</div>
+              </div>
+              <div id="s6-c3" class="glass stu-card">
+                <div class="stu-avatar">KA</div><div class="stu-name">Kabir</div><div class="stu-meta">🔥 6 · 78%</div>
+              </div>
+            </div>
+            <div id="s6-outro" style="margin-top: 60px; display:flex; flex-direction:column; align-items:center;">
+              <div class="outro-mark display"><span style="color:#1a2332;">Phonics</span><span style="color:#0d9488;">Flow</span></div>
+              <div id="s6-cta" class="cta-pill" style="margin-top: 24px;">Get Started →</div>
+              <div class="outro-tag">one sound at a time.</div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============ AUDIO ============ -->
+      <audio id="bg-music" data-start="0" data-duration="21" data-track-index="10" data-volume="0.30"
+        src="assets/music/happy-beats-business-moves-vol-1-by-ende-dot-app.mp3"></audio>
+      <audio id="sfx-tag" data-start="0.72" data-duration="1" data-track-index="11" data-volume="0.62"
+        src="assets/sfx/interface/drop_001.ogg"></audio>
+      <audio id="sfx-step2" data-start="2.95" data-duration="1" data-track-index="12" data-volume="0.6"
+        src="assets/sfx/interface/drop_002.ogg"></audio>
+      <audio id="sfx-step3" data-start="6.75" data-duration="1" data-track-index="13" data-volume="0.6"
+        src="assets/sfx/interface/drop_003.ogg"></audio>
+      <audio id="sfx-tap" data-start="7.45" data-duration="1" data-track-index="14" data-volume="0.7"
+        src="assets/sfx/ui/mouseclick1.ogg"></audio>
+      <audio id="sfx-bell" data-start="12.0" data-duration="2" data-track-index="15" data-volume="0.72"
+        src="assets/sfx/impact/impactBell_heavy_000.ogg"></audio>
+      <audio id="sfx-c1" data-start="15.0" data-duration="1" data-track-index="16" data-volume="0.6"
+        src="assets/sfx/casino/card-slide-1.ogg"></audio>
+      <audio id="sfx-c2" data-start="16.0" data-duration="1" data-track-index="17" data-volume="0.6"
+        src="assets/sfx/casino/card-slide-2.ogg"></audio>
+      <audio id="sfx-c3" data-start="17.0" data-duration="1" data-track-index="18" data-volume="0.66"
+        src="assets/sfx/casino/card-slide-3.ogg"></audio>
+      <audio id="sfx-cta" data-start="18.5" data-duration="1" data-track-index="19" data-volume="0.66"
+        src="assets/sfx/interface/drop_001.ogg"></audio>
+    </div>
+
+    <script>
+      window.__timelines = window.__timelines || {};
+      const tl = gsap.timeline({ paused: true });
+      const E = "power3.out";
+
+      /* ---------- Scene 1 — Hook (0–3.0) ---------- */
+      tl.fromTo("#s1-inner", { autoAlpha: 0 }, { autoAlpha: 1, duration: 0.4 }, 0.05);
+      tl.from("#s1-badge", { y: 24, opacity: 0, duration: 0.5, ease: E }, 0.2);
+      tl.from("#s1-wordmark", { y: 40, scale: 0.92, opacity: 0, duration: 0.6, ease: "back.out(1.5)" }, 0.35);
+      tl.from("#s1-underline", { scaleX: 0, duration: 0.6, ease: "power2.inOut" }, 0.75);
+      tl.from("#s1-tag1", { y: 26, opacity: 0, duration: 0.5, ease: E }, 0.9);
+      tl.from("#s1-tag2", { y: 26, opacity: 0, duration: 0.5, ease: E }, 1.05);
+      tl.to("#s1-inner", { autoAlpha: 0, duration: 0.35, ease: "power1.in" }, 2.65);
+
+      /* ---------- Scene 2 — Read aloud (2.8–6.8) ---------- */
+      tl.fromTo("#s2-inner", { autoAlpha: 0 }, { autoAlpha: 1, duration: 0.4 }, 2.85);
+      tl.from("#s2-chip", { x: -40, opacity: 0, duration: 0.5, ease: E }, 2.95);
+      tl.from("#s2-card", { y: 46, opacity: 0, duration: 0.6, ease: E }, 3.1);
+      tl.from("#s2-cap", { y: 20, opacity: 0, duration: 0.5, ease: E }, 3.4);
+      // focus pills pop one after another
+      tl.from("#s2-pill1", { scale: 0.6, opacity: 0, transformOrigin: "center", duration: 0.4, ease: "back.out(2)" }, 4.0);
+      tl.from("#s2-pill2", { scale: 0.6, opacity: 0, transformOrigin: "center", duration: 0.4, ease: "back.out(2)" }, 4.35);
+      tl.to("#s2-inner", { autoAlpha: 0, duration: 0.35, ease: "power1.in" }, 6.45);
+
+      /* ---------- Scene 3 — Tap the mic (6.6–10.0) ---------- */
+      tl.fromTo("#s3-inner", { autoAlpha: 0 }, { autoAlpha: 1, duration: 0.4 }, 6.65);
+      tl.from("#s3-chip", { x: -40, opacity: 0, duration: 0.5, ease: E }, 6.8);
+      tl.from("#s3-mic", { scale: 0.7, opacity: 0, transformOrigin: "center", duration: 0.55, ease: "back.out(1.7)" }, 6.95);
+      tl.from("#s3-cap", { y: 20, opacity: 0, duration: 0.5, ease: E }, 7.2);
+      // simulated tap
+      tl.fromTo("#tap-dot", { scale: 0, opacity: 0 }, { scale: 1, opacity: 1, transformOrigin: "center", duration: 0.22, ease: "power2.out" }, 7.4);
+      tl.to("#s3-mic", { scale: 0.94, duration: 0.12, ease: "power2.in" }, 7.5);
+      tl.to("#s3-mic", { scale: 1, duration: 0.35, ease: "elastic.out(1,0.5)" }, 7.62);
+      tl.to("#tap-dot", { scale: 0.7, opacity: 0, duration: 0.3, ease: "power1.in" }, 7.7);
+      // pulse rings (finite repeats)
+      tl.fromTo("#s3-ring1", { scale: 1, opacity: 0.55 }, { scale: 2.1, opacity: 0, duration: 1.1, ease: "power1.out", repeat: 2 }, 7.6);
+      tl.fromTo("#s3-ring2", { scale: 1, opacity: 0.5 }, { scale: 2.1, opacity: 0, duration: 1.1, ease: "power1.out", repeat: 2 }, 8.15);
+      tl.to("#s3-inner", { autoAlpha: 0, duration: 0.35, ease: "power1.in" }, 9.65);
+
+      /* ---------- Scene 4 — Instant feedback (9.8–14.4) ---------- */
+      tl.fromTo("#s4-inner", { autoAlpha: 0 }, { autoAlpha: 1, duration: 0.4 }, 9.85);
+      tl.from("#s4-chip", { x: -40, opacity: 0, duration: 0.5, ease: E }, 10.0);
+      tl.from("#s4-ring", { scale: 0.86, opacity: 0, transformOrigin: "center", duration: 0.5, ease: "back.out(1.4)" }, 10.15);
+      // ring draws to 87% and number counts up, locking at 12.0s   // beat-locked: 12.00s
+      tl.to("#ring-fg", { strokeDashoffset: 122.5, duration: 1.5, ease: "power2.inOut" }, 10.5);
+      const counter = { v: 0 };
+      tl.to(counter, {
+        v: 87, duration: 1.5, ease: "power2.inOut",
+        onUpdate: () => {
+          const el = document.getElementById("ring-num");
+          if (el) el.textContent = Math.round(counter.v) + "%";
+        }
+      }, 10.5);
+      tl.from("#s4-title", { y: 28, opacity: 0, duration: 0.5, ease: "back.out(1.6)" }, 12.0);
+      tl.from("#s4-sub", { y: 20, opacity: 0, duration: 0.45, ease: E }, 12.2);
+      // subtle ring glow breath after lock
+      tl.fromTo("#ring-fg", { filter: "drop-shadow(0 0 0px rgba(5,150,105,0))" },
+        { filter: "drop-shadow(0 0 18px rgba(5,150,105,0.5))", duration: 0.6, yoyo: true, repeat: 1, ease: "sine.inOut" }, 12.0);
+      tl.to("#s4-inner", { autoAlpha: 0, duration: 0.35, ease: "power1.in" }, 14.05);
+
+      /* ---------- Scene 5 — Weak sounds (14.2–17.8) ---------- */
+      tl.fromTo("#s5-inner", { autoAlpha: 0 }, { autoAlpha: 1, duration: 0.4 }, 14.25);
+      tl.from("#s5-chip", { x: -40, opacity: 0, duration: 0.5, ease: E }, 14.4);
+      tl.from("#s5-card", { y: 44, opacity: 0, duration: 0.55, ease: E }, 14.5);
+      tl.from("#s5-streak", { x: 44, opacity: 0, duration: 0.55, ease: E }, 14.7);
+      // weak-sound chips reveal one by one   // beat-grid: 15.00s, 16.00s, 17.00s
+      tl.from("#ws-r1", { x: -30, opacity: 0, duration: 0.4, ease: E }, 15.0);
+      tl.from("#ws-r2", { x: -30, opacity: 0, duration: 0.4, ease: E }, 16.0);
+      tl.from("#ws-r3", { x: -30, opacity: 0, duration: 0.4, ease: E }, 17.0);
+      tl.to("#s5-inner", { autoAlpha: 0, duration: 0.35, ease: "power1.in" }, 17.45);
+
+      /* ---------- Scene 6 — Teachers + outro (17.6–21.0) ---------- */
+      tl.fromTo("#s6-inner", { autoAlpha: 0 }, { autoAlpha: 1, duration: 0.4 }, 17.65);
+      tl.from("#s6-line", { y: 28, opacity: 0, duration: 0.5, ease: E }, 17.8);
+      tl.from("#s6-c1", { y: 40, opacity: 0, duration: 0.45, ease: E }, 17.95);
+      tl.from("#s6-c2", { y: 40, opacity: 0, duration: 0.45, ease: E }, 18.08);
+      tl.from("#s6-c3", { y: 40, opacity: 0, duration: 0.45, ease: E }, 18.21);
+      // outro lockup lands on strong cue   // beat-locked: 18.52s
+      tl.from("#s6-outro", { y: 30, opacity: 0, duration: 0.55, ease: "back.out(1.4)" }, 18.5);
+      tl.from("#s6-cta", { scale: 0.85, opacity: 0, transformOrigin: "center", duration: 0.45, ease: "back.out(1.8)" }, 18.75);
+
+      // gentle music fade-out over the final second
+      tl.to("#bg-music", { volume: 0, duration: 1.0, ease: "power1.in" }, 20.0);
+
+      window.__timelines["main"] = tl;
+    </script>
+  </body>
+</html>

@@ -5,9 +5,10 @@ import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/auth-context';
 import { BASE_API_URL } from '@/lib/config';
 import { Button } from '@/components/ui/button';
-import { Copy, BookOpen, Users, Check, GraduationCap, ChevronRight } from 'lucide-react';
+import { Copy, BookOpen, Users, Check, GraduationCap, ChevronRight, Send, Loader2, Info } from 'lucide-react';
 import { PreviousSessions } from '@/components/dashboard/PreviousSessions';
 import { OnboardingModal } from '@/components/ui/OnboardingModal';
+import { IntroVideoModal } from '@/components/ui/IntroVideoModal';
 
 export default function TeacherDashboard() {
   const router = useRouter();
@@ -18,6 +19,9 @@ export default function TeacherDashboard() {
   const [loadingSessions, setLoadingSessions] = useState(true);
   const [loadingStudents, setLoadingStudents] = useState(true);
   const [isOnboardingOpen, setIsOnboardingOpen] = useState(false);
+  const [isIntroOpen, setIsIntroOpen] = useState(false);
+  const [sendingReport, setSendingReport] = useState(false);
+  const [reportMsg, setReportMsg] = useState<{ ok: boolean; text: string } | null>(null);
 
   useEffect(() => {
     if (!isLoading && user?.role === 'teacher') {
@@ -77,6 +81,26 @@ export default function TeacherDashboard() {
     setTimeout(() => setCopied(false), 2000);
   };
 
+  const handleSendReport = async () => {
+    if (!user?.id || sendingReport) return;
+    setSendingReport(true);
+    setReportMsg(null);
+    try {
+      const res = await fetch(`${BASE_API_URL}/send-principal-report`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId: user.id }),
+      });
+      const data = await res.json();
+      setReportMsg({ ok: !!data.success, text: data.msg || (data.success ? 'Report sent.' : 'Could not send report.') });
+    } catch {
+      setReportMsg({ ok: false, text: 'Something went wrong. Please try again.' });
+    } finally {
+      setSendingReport(false);
+      setTimeout(() => setReportMsg(null), 6000);
+    }
+  };
+
   const teacherName = user.teacherData.name?.split(' ')[0] || 'Teacher';
 
   return (
@@ -99,6 +123,20 @@ export default function TeacherDashboard() {
               Welcome back,{' '}
               <span style={{ color: '#0d9488' }}>{teacherName}!</span>
             </h1>
+            <button
+              id="intro-video-btn"
+              onClick={() => setIsIntroOpen(true)}
+              aria-label="Watch intro video"
+              title="Watch intro video"
+              className="w-8 h-8 rounded-full flex items-center justify-center transition-all duration-200 hover:scale-110"
+              style={{
+                background: 'rgba(13,148,136,0.08)',
+                border: '1px solid #99f6e4',
+                color: '#0d9488',
+              }}
+            >
+              <Info className="w-4 h-4" />
+            </button>
           </div>
           <p className="ml-12 text-sm" style={{ color: '#6b7280', fontFamily: 'Inter, sans-serif' }}>
             {students.length} student{students.length !== 1 ? 's' : ''} in your class
@@ -115,15 +153,40 @@ export default function TeacherDashboard() {
           />
         </div>
 
-        <div className="flex items-center gap-2">
-          <Button
-            id="take-test-btn"
-            onClick={() => router.push('/practice')}
-            size="default"
-          >
-            <BookOpen className="w-4 h-4 mr-1.5" />
-            Take Test
-          </Button>
+        <div className="flex flex-col items-stretch sm:items-end gap-2">
+          <div className="flex items-center gap-2">
+            <Button
+              id="send-principal-report-btn"
+              onClick={handleSendReport}
+              disabled={sendingReport}
+              variant="outline"
+              size="default"
+            >
+              {sendingReport ? (
+                <Loader2 className="w-4 h-4 mr-1.5 animate-spin" />
+              ) : (
+                <Send className="w-4 h-4 mr-1.5" />
+              )}
+              {sendingReport ? 'Sending...' : 'Email Principal Report'}
+            </Button>
+            <Button
+              id="take-test-btn"
+              onClick={() => router.push('/practice')}
+              size="default"
+            >
+              <BookOpen className="w-4 h-4 mr-1.5" />
+              Take Test
+            </Button>
+          </div>
+          {reportMsg && (
+            <p
+              className="text-xs font-medium animate-fade-in text-right"
+              style={{ color: reportMsg.ok ? '#059669' : '#dc2626' }}
+            >
+              {reportMsg.ok ? '✓ ' : '⚠ '}
+              {reportMsg.text}
+            </p>
+          )}
         </div>
       </div>
 
@@ -327,6 +390,9 @@ export default function TeacherDashboard() {
 
       {/* Onboarding walk-through modal */}
       <OnboardingModal role="teacher" isOpen={isOnboardingOpen} onClose={() => setIsOnboardingOpen(false)} />
+
+      {/* Intro video modal (opened from the "i" button) */}
+      <IntroVideoModal isOpen={isIntroOpen} onClose={() => setIsIntroOpen(false)} />
     </div>
   );
 }

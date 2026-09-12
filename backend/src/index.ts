@@ -1,9 +1,9 @@
 import "dotenv/config";
 import { PrismaClient } from "@prisma/client";
+import { PrismaPg } from "@prisma/adapter-pg";
 import express, { Request, Response } from "express";
 import bcrypt from "bcrypt";
 import { exec } from "child_process";
-import { withAccelerate } from "@prisma/extension-accelerate"
 import * as sdk from 'microsoft-cognitiveservices-speech-sdk';
 import cron from 'node-cron'
 import nodemailer from "nodemailer";
@@ -21,9 +21,8 @@ dotenv.config({ path: path.resolve(__dirname, '.env') });
 dotenv.config({ path: path.resolve(__dirname, '../.env') });
 dotenv.config();
 const client = new Groq({apiKey: process.env.GROQ_API_KEY})
-const prisma = new PrismaClient({
-  accelerateUrl: process.env.DATABASE_URL || "",
-}).$extends(withAccelerate())
+const adapter = new PrismaPg({ connectionString: process.env.DATABASE_URL });
+const prisma = new PrismaClient({ adapter });
 const app = express();
 //nodemailer initialization 
 const transporter = nodemailer.createTransport({
@@ -38,11 +37,16 @@ const transporter = nodemailer.createTransport({
 });
 
 //multer initialization
+// Anchor to the module dir (not cwd) so it resolves the same regardless of where the server is launched.
+const UPLOAD_DIR = path.resolve(__dirname, "../uploads");
+// Ensure the upload directory exists so multer can write recordings (avoids ENOENT).
+fs.mkdirSync(UPLOAD_DIR, { recursive: true });
 const storage = multer.diskStorage({
     destination: (req, file, cb) => {
-        cb(null, "./uploads/");
+        fs.mkdirSync(UPLOAD_DIR, { recursive: true });
+        cb(null, UPLOAD_DIR);
     },
-    filename: (req, file, cb) => { 
+    filename: (req, file, cb) => {
         cb(null, file.originalname);
     },
 });
@@ -59,8 +63,8 @@ app.get('/tts', async (req: Request, res: Response): Promise<any> => {
   const slow = req.query.slow === 'true';
   if (!word) return res.status(400).json({ error: 'word is required' });
 
-  // ttsspeed: 0.75 = clearer normal speed, 0.18 = extra slow speed for learning
-  const speed = slow ? '0.18' : '0.75';
+  // ttsspeed: 0.7 = clearer normal speed, 0.18 = extra slow speed for learning
+  const speed = slow ? '0.18' : '0.7';
   const url = `https://translate.google.com/translate_tts?ie=UTF-8&q=${encodeURIComponent(word)}&tl=en-IN&client=tw-ob&ttsspeed=${speed}`;
 
   try {
@@ -1163,300 +1167,68 @@ Always speak directly to the user. Provide practical pronunciation tips, mouth p
     res.end();
   }
 });
-//[1,2,3,4]
-//add a reminder cron_job
-// mail + scheduler 
-//rsounak55 gmail.com
-cron.schedule("*/30 * * * *",async()=>{
+// Build a human-readable label for the trailing 7-day reporting window.
+function getWeeklyPeriodLabel(now: Date): string {
+  const start = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+  const startStr = start.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
+  const endStr = now.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
+  return `${startStr} – ${endStr}`;
+}
+
+// Use Groq to generate one short, practical improvement tip per difficult word.
+// Returns a map of lowercased word -> tip. Never throws; returns {} on failure.
+async function getWordImprovementTips(words: string[]): Promise<Record<string, string>> {
+  if (!words || words.length === 0) return {};
   try {
-    const response= await prisma.user.findMany({})
-    response.map(async(item:any)=>{
-      try {
-        const name = item.email.split("@")[0]
-        const info = await transporter.sendMail({
-  from: '"Phonics Engine"',
-  to:`${item.email}`,
-  subject: `Reminder to take the assessment`,
-  html: `<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta http-equiv="X-UA-Compatible" content="IE=edge">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Keep Building Strong Reading Skills!</title>
-
-    <style>
-        body {
-            margin: 0;
-            padding: 0;
-            background-color: #f4f6f8;
-            font-family: Arial, Helvetica, sans-serif;
-        }
-
-        table {
-            border-spacing: 0;
-        }
-
-        td {
-            padding: 0;
-        }
-
-        img {
-            border: 0;
-        }
-    </style>
-</head>
-
-<body>
-
-    <!-- Hidden Preview Text -->
-    <div style="display:none;max-height:0;overflow:hidden;opacity:0;">
-        Keep practicing and continue building stronger reading skills every day.
-    </div>
-
-    <table
-        role="presentation"
-        width="100%"
-        cellpadding="0"
-        cellspacing="0"
-        border="0"
-        style="background-color:#f4f6f8;"
-    >
-        <tr>
-            <td align="center" style="padding:40px 20px;">
-
-                <!-- Main Container -->
-                <table
-                    role="presentation"
-                    width="600"
-                    cellpadding="0"
-                    cellspacing="0"
-                    border="0"
-                    style="
-                        background-color:#ffffff;
-                        border-radius:10px;
-                        overflow:hidden;
-                    "
-                >
-
-                    <!-- Header -->
-                    <tr>
-                        <td
-                            align="center"
-                            style="
-                                background-color:#2563eb;
-                                padding:32px;
-                            "
-                        >
-                            <h1
-                                style="
-                                    margin:0;
-                                    color:#ffffff;
-                                    font-size:28px;
-                                    font-weight:bold;
-                                "
-                            >
-                                Keep Building Strong Reading Skills!
-                            </h1>
-                        </td>
-                    </tr>
-
-                    <!-- Content -->
-                    <tr>
-                        <td style="padding:40px;">
-
-                            <p
-                                style="
-                                    font-size:16px;
-                                    line-height:1.7;
-                                    color:#333333;
-                                    margin-top:0;
-                                "
-                            >
-                                Hello ${name},
-                            </p>
-
-                            <p
-                                style="
-                                    font-size:16px;
-                                    line-height:1.7;
-                                    color:#333333;
-                                "
-                            >
-                                Every reading session is an opportunity to build stronger phonics skills, improve pronunciation, and grow confidence as a reader.
-                            </p>
-
-                            <p
-                                style="
-                                    font-size:16px;
-                                    line-height:1.7;
-                                    color:#333333;
-                                "
-                            >
-                                Regular practice helps reinforce sound-letter relationships, improve word recognition, and develop reading fluency over time. Even a few minutes of focused reading each day can make a meaningful difference.
-                            </p>
-
-                            <!-- Highlight Box -->
-                            <table
-                                role="presentation"
-                                width="100%"
-                                cellpadding="0"
-                                cellspacing="0"
-                                border="0"
-                                style="
-                                    margin:30px 0;
-                                "
-                            >
-                                <tr>
-                                    <td
-                                        style="
-                                            background:#eff6ff;
-                                            border-left:4px solid #2563eb;
-                                            padding:20px;
-                                        "
-                                    >
-                                        <p
-                                            style="
-                                                margin:0;
-                                                color:#1e3a8a;
-                                                font-size:15px;
-                                                line-height:1.8;
-                                            "
-                                        >
-                                            <strong>Why keep practicing?</strong>
-                                            <br><br>
-                                            • Strengthen phonics and decoding skills<br>
-                                            • Improve pronunciation and word recognition<br>
-                                            • Build confidence while reading aloud<br>
-                                            • Track progress and celebrate growth over time
-                                        </p>
-                                    </td>
-                                </tr>
-                            </table>
-
-                            <p
-                                style="
-                                    font-size:16px;
-                                    line-height:1.7;
-                                    color:#333333;
-                                "
-                            >
-                                Consistent practice is one of the most effective ways to become a stronger reader. We encourage you to continue your learning journey and make reading a part of your daily routine.
-                            </p>
-
-                            <p
-                                style="
-                                    font-size:16px;
-                                    line-height:1.7;
-                                    color:#333333;
-                                "
-                            >
-                                We look forward to seeing your progress continue and celebrating your reading achievements along the way.
-                            </p>
-
-                            <p
-                                style="
-                                    font-size:16px;
-                                    line-height:1.7;
-                                    color:#333333;
-                                    margin-bottom:0;
-                                "
-                            >
-                                Happy Learning,
-                                <br>
-                                <strong>The PhonicsFlow Team</strong>
-                            </p>
-
-                        </td>
-                    </tr>
-
-                    <!-- Divider -->
-                    <tr>
-                        <td style="padding:0 40px;">
-                            <hr
-                                style="
-                                    border:none;
-                                    border-top:1px solid #e5e7eb;
-                                "
-                            >
-                        </td>
-                    </tr>
-
-                    <!-- Footer -->
-                    <tr>
-                        <td
-                            align="center"
-                            style="
-                                background:#fafafa;
-                                padding:24px;
-                            "
-                        >
-                            <p
-                                style="
-                                    margin:0;
-                                    color:#6b7280;
-                                    font-size:13px;
-                                    line-height:1.6;
-                                "
-                            >
-                                This is an automated reminder from the Phonics Bridge Engine.
-                            </p>
-
-                            <p
-                                style="
-                                    margin-top:8px;
-                                    color:#9ca3af;
-                                    font-size:12px;
-                                "
-                            >
-                                © 2026 PhonicsFlow Engine. All rights reserved.
-                            </p>
-                        </td>
-                    </tr>
-
-                </table>
-                <!-- End Main Container -->
-
-            </td>
-        </tr>
-    </table>
-
-</body>
-</html>`
-});
-        console.log(`Reminder email sent successfully to ${item.email}`);
-      } catch (err) {
-        console.error(`Failed to send reminder email to ${item.email}:`, err);
-      }
-    })
-  } catch (err) {
-    console.error("Reminder cron job database error:", err);
-  }
-})
-
-// Helper function to generate and send monthly reports
-async function generateAndSendMonthlyReports(): Promise<void> {
-  console.log("Starting automated monthly principal report generation...");
-  const now = new Date();
-  const monthName = now.toLocaleString('default', { month: 'long' }) + " " + now.getFullYear();
-
-  try {
-    const teachers = await prisma.user.findMany({
-      where: { 
-        teacher: true,
-        school_name: { not: "" }
-      }
+    const completion = await client.chat.completions.create({
+      model: "llama-3.3-70b-versatile",
+      messages: [
+        {
+          role: "system",
+          content:
+            "You are a friendly phonics coach for rural Indian primary-school teachers. " +
+            "For each English word given, write ONE short, practical tip (max 18 words) a teacher can use to help a child pronounce that exact word correctly. " +
+            "Point to the specific tricky sound(s) or syllables in that word (e.g. the 'th' in 'thirsty', silent letters, vowel blends). Keep it simple, no jargon. " +
+            "Respond ONLY with a JSON object shaped as {\"tips\": {\"word\": \"tip\", ...}}, using the exact words provided as keys.",
+        },
+        { role: "user", content: `Words: ${words.join(", ")}` },
+      ],
+      temperature: 0.5,
+      max_completion_tokens: 1200,
+      top_p: 1,
+      stream: false,
+      response_format: { type: "json_object" },
     });
+    const raw = completion.choices[0]?.message?.content || "{}";
+    const parsed = JSON.parse(raw);
+    const tips = (parsed && typeof parsed.tips === "object") ? parsed.tips : parsed;
+    const out: Record<string, string> = {};
+    if (tips && typeof tips === "object") {
+      for (const [k, v] of Object.entries(tips)) {
+        if (typeof v === "string") out[k.toLowerCase().trim()] = v;
+      }
+    }
+    return out;
+  } catch (err) {
+    console.error("Groq word-tip generation failed:", err);
+    return {};
+  }
+}
 
-    for (const teacher of teachers) {
-      try {
+// Generate and email a compiled weekly progress report to a single teacher's principal.
+// Returns whether an email was sent, and a reason when it was skipped.
+async function generateReportForTeacher(
+  teacher: any,
+  now: Date,
+  periodLabel: string
+): Promise<{ sent: boolean; reason?: string }> {
         const students = await prisma.student.findMany({
           where: { code: teacher.teacher_code },
           include: {
             assessment: {
               where: {
                 time_created: {
-                  gte: new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000) // Last 30 days
+                  gte: new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000) // Last 7 days
                 }
               }
             }
@@ -1464,24 +1236,23 @@ async function generateAndSendMonthlyReports(): Promise<void> {
         });
 
         if (students.length === 0) {
-          console.log(`No student activity for school "${teacher.school_name}" (Teacher: ${teacher.email}). Skipping report.`);
-          continue;
+          console.log(`No students for school "${teacher.school_name}" (Teacher: ${teacher.email}). Skipping report.`);
+          return { sent: false, reason: "No students have joined your class yet." };
         }
 
-        // Aggregate statistics
-        let totalSessions = 0;
+        // Aggregate statistics — track the WORDS causing the most difficulty (not phonemes)
         let totalAccuracySum = 0;
         let totalAccuracyCount = 0;
-        const schoolPhonemes: Record<string, { sum: number; count: number }> = {};
+        // word -> { summed accuracy, times seen, times it was an error }
+        const schoolWords: Record<string, { sum: number; count: number; errors: number }> = {};
         const studentDetails: any[] = [];
 
         for (const student of students) {
           let studentAccSum = 0;
           let studentAccCount = 0;
-          const studentPhonemes: Record<string, { sum: number; count: number }> = {};
+          const studentWords: Record<string, { sum: number; count: number }> = {};
 
           for (const assess of student.assessment) {
-            totalSessions++;
             if (assess.accuracy !== null && assess.accuracy !== undefined) {
               totalAccuracySum += assess.accuracy;
               totalAccuracyCount++;
@@ -1494,23 +1265,21 @@ async function generateAndSendMonthlyReports(): Promise<void> {
                 const wordsList = JSON.parse(assess.words);
                 if (Array.isArray(wordsList)) {
                   for (const w of wordsList) {
-                    if (w.phonemes && Array.isArray(w.phonemes)) {
-                      for (const p of w.phonemes) {
-                        const ph = (p.phoneme || '').toLowerCase().trim();
-                        if (!ph) continue;
-                        const score = p.accuracyScore ?? 100;
-                        
-                        // School level
-                        if (!schoolPhonemes[ph]) schoolPhonemes[ph] = { sum: 0, count: 0 };
-                        schoolPhonemes[ph].sum += score;
-                        schoolPhonemes[ph].count++;
+                    const word = (w.word || '').toLowerCase().replace(/[^a-z'-]/g, '').trim();
+                    if (!word) continue;
+                    const score = typeof w.accuracyScore === 'number' ? w.accuracyScore : 100;
+                    const isError = (w.errorType && w.errorType !== 'None') || score < 80;
 
-                        // Student level
-                        if (!studentPhonemes[ph]) studentPhonemes[ph] = { sum: 0, count: 0 };
-                        studentPhonemes[ph].sum += score;
-                        studentPhonemes[ph].count++;
-                      }
-                    }
+                    // School level
+                    if (!schoolWords[word]) schoolWords[word] = { sum: 0, count: 0, errors: 0 };
+                    schoolWords[word].sum += score;
+                    schoolWords[word].count++;
+                    if (isError) schoolWords[word].errors++;
+
+                    // Student level
+                    if (!studentWords[word]) studentWords[word] = { sum: 0, count: 0 };
+                    studentWords[word].sum += score;
+                    studentWords[word].count++;
                   }
                 }
               } catch (err) {
@@ -1520,12 +1289,14 @@ async function generateAndSendMonthlyReports(): Promise<void> {
           }
 
           const avgStudentAccuracy = studentAccCount > 0 ? Math.round(studentAccSum / studentAccCount) : 0;
-          
-          // Identify student weaknesses (average accuracy < 80)
-          const needsPractice = Object.entries(studentPhonemes)
-            .filter(([_, stats]) => (stats.sum / stats.count) < 80)
-            .map(([ph]) => `/${ph}/`)
+
+          // A student's most difficult words (lowest average accuracy, below 80%)
+          const needsPractice = Object.entries(studentWords)
+            .map(([word, s]) => ({ word, acc: s.sum / s.count }))
+            .filter(x => x.acc < 80)
+            .sort((a, b) => a.acc - b.acc)
             .slice(0, 3)
+            .map(x => x.word)
             .join(', ');
 
           studentDetails.push({
@@ -1539,30 +1310,33 @@ async function generateAndSendMonthlyReports(): Promise<void> {
 
         const overallAccuracy = totalAccuracyCount > 0 ? Math.round(totalAccuracySum / totalAccuracyCount) : 0;
 
-        // Phoneme rankings
-        const phonemeAverages = Object.entries(schoolPhonemes).map(([ph, stats]) => ({
-          phoneme: ph,
-          accuracy: Math.round(stats.sum / stats.count)
-        }));
-
-        const strengths = phonemeAverages
-          .filter(item => item.accuracy >= 80)
-          .sort((a, b) => b.accuracy - a.accuracy)
-          .slice(0, 3);
-
-        const weaknesses = phonemeAverages
-          .filter(item => item.accuracy < 80)
+        // School-wide words causing the most difficulty (lowest average accuracy first)
+        const difficultWords = Object.entries(schoolWords)
+          .map(([word, s]) => ({
+            word,
+            accuracy: Math.round(s.sum / s.count),
+            timesSeen: s.count,
+            errors: s.errors,
+          }))
+          .filter(x => x.accuracy < 80 || x.errors > 0)
           .sort((a, b) => a.accuracy - b.accuracy)
-          .slice(0, 3);
+          .slice(0, 6);
+
+        // Ask Groq for a short "how to improve" tip for each difficult word
+        const wordTips = await getWordImprovementTips(difficultWords.map(w => w.word));
+        const difficultWordsWithTips = difficultWords.map(w => ({
+          ...w,
+          tip: wordTips[w.word] ||
+            'Break the word into syllables, say each sound slowly, then blend them together and repeat.',
+        }));
 
         const reportPayload = {
           schoolName: teacher.school_name,
           principalName: teacher.principal_name || 'School Principal',
-          month: monthName,
+          month: periodLabel,
           totalStudents: students.length,
           averageAccuracy: overallAccuracy,
-          strengths,
-          weaknesses,
+          difficultWords: difficultWordsWithTips,
           students: studentDetails
         };
 
@@ -1594,15 +1368,15 @@ async function generateAndSendMonthlyReports(): Promise<void> {
         const mailOptions: any = {
           from: `"Phonics Bridge Engine" <${process.env.MAIL_ID || 'noreply@phonicsflow.com'}>`,
           to: targetEmail,
-          subject: `Monthly Phonics Progress Report - ${teacher.school_name} (${monthName})`,
+          subject: `Weekly Phonics Progress Report - ${teacher.school_name} (${periodLabel})`,
           html: `<div style="font-family: Arial, sans-serif; color: #1f2937; line-height: 1.6; max-width: 600px; margin: 0 auto; border: 1px solid #e2e8f0; border-radius: 12px; overflow: hidden;">
             <div style="background-color: #0d9488; padding: 24px; text-align: center; color: white;">
-              <h2 style="margin: 0; font-size: 20px;">Monthly Phonics Progress Report</h2>
+              <h2 style="margin: 0; font-size: 20px;">Weekly Phonics Progress Report</h2>
               <p style="margin: 4px 0 0 0; font-size: 14px; opacity: 0.9;">${teacher.school_name}</p>
             </div>
             <div style="padding: 24px;">
               <p>Dear Principal <b>${teacher.principal_name || 'Administrator'}</b>,</p>
-              <p>Please find attached the automated monthly Phonics Progress Report for your school, <b>${teacher.school_name}</b>, for the period ending <b>${monthName}</b>.</p>
+              <p>Please find attached the Phonics Progress Report for your school, <b>${teacher.school_name}</b>, covering the week of <b>${periodLabel}</b>.</p>
               <p>This report includes high-level statistics on student progress, cohort strengths, phonemes requiring targeted intervention, and individual student participation rates.</p>
               <p style="margin-top: 24px;">Best regards,</p>
               <p><b>Phonics Bridge Engine Dashboard Team</b></p>
@@ -1613,7 +1387,7 @@ async function generateAndSendMonthlyReports(): Promise<void> {
           </div>`,
           attachments: [
             {
-              filename: `Phonics_Report_${monthName.replace(/\s+/g, '_')}.pdf`,
+              filename: `Phonics_Weekly_Report_${periodLabel.replace(/[^a-zA-Z0-9]+/g, '_')}.pdf`,
               path: pdfPath
             }
           ]
@@ -1630,31 +1404,83 @@ async function generateAndSendMonthlyReports(): Promise<void> {
         if (fs.existsSync(jsonPath)) fs.unlinkSync(jsonPath);
         if (fs.existsSync(pdfPath)) fs.unlinkSync(pdfPath);
 
+        return { sent: true };
+}
+
+// Generate and email weekly reports for every teacher with a school.
+async function generateAndSendWeeklyReports(): Promise<void> {
+  console.log("Starting automated weekly principal report generation...");
+  const now = new Date();
+  const periodLabel = getWeeklyPeriodLabel(now);
+
+  try {
+    const teachers = await prisma.user.findMany({
+      where: {
+        teacher: true,
+        school_name: { not: "" }
+      }
+    });
+
+    for (const teacher of teachers) {
+      try {
+        await generateReportForTeacher(teacher, now, periodLabel);
       } catch (err) {
         console.error(`Failed to process report for teacher ${teacher.email}:`, err);
       }
     }
   } catch (err) {
-    console.error("Failed to fetch teachers for monthly reports:", err);
+    console.error("Failed to fetch teachers for weekly reports:", err);
   }
 }
 
-// REST endpoint to trigger report generation manually
-app.get('/trigger-monthly-reports', async (req: Request, res: Response): Promise<any> => {
+// Button endpoint: a teacher sends the compiled report to their principal on demand.
+app.post('/send-principal-report', async (req: Request, res: Response): Promise<any> => {
+  const userId = (req.body?.userId as string) || (req.query.userId as string);
+  if (!userId) {
+    return res.status(400).json({ success: false, msg: "userId is required" });
+  }
+
   try {
-    await generateAndSendMonthlyReports();
-    return res.status(200).json({ success: true, msg: "Monthly reports triggered and sent successfully." });
+    const teacher = await prisma.user.findUnique({ where: { id: userId } });
+    if (!teacher || !teacher.teacher) {
+      return res.status(404).json({ success: false, msg: "Teacher not found." });
+    }
+    if (!teacher.school_name) {
+      return res.status(400).json({ success: false, msg: "Add your school details before sending a report." });
+    }
+
+    const now = new Date();
+    const periodLabel = getWeeklyPeriodLabel(now);
+    const result = await generateReportForTeacher(teacher, now, periodLabel);
+
+    if (!result.sent) {
+      return res.status(200).json({ success: false, msg: result.reason || "No report was sent." });
+    }
+
+    const targetEmail = teacher.principal_email || teacher.email;
+    return res.status(200).json({ success: true, msg: `Report sent to ${targetEmail}.` });
+  } catch (err: any) {
+    console.error("send-principal-report error:", err);
+    return res.status(500).json({ success: false, msg: "Failed to send report.", error: err.message });
+  }
+});
+
+// REST endpoint to trigger report generation for all schools manually
+app.get('/trigger-weekly-reports', async (req: Request, res: Response): Promise<any> => {
+  try {
+    await generateAndSendWeeklyReports();
+    return res.status(200).json({ success: true, msg: "Weekly reports triggered and sent successfully." });
   } catch (err: any) {
     return res.status(500).json({ success: false, msg: "Failed to trigger reports", error: err.message });
   }
 });
 
-// Schedule monthly principal reports on the 1st of every month at midnight
-cron.schedule("0 0 1 * *", async () => {
+// Schedule weekly principal reports every Monday at 6:00 AM
+cron.schedule("0 6 * * 1", async () => {
   try {
-    await generateAndSendMonthlyReports();
+    await generateAndSendWeeklyReports();
   } catch (err) {
-    console.error("Cron scheduled monthly reports error:", err);
+    console.error("Cron scheduled weekly reports error:", err);
   }
 });
 
