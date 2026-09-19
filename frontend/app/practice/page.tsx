@@ -1,4 +1,6 @@
-'use client';
+      // Azure's composite pronunciation score (folds in fluency + completeness),
+      // matching what the adaptive-difficulty logic grades progression on.
+      accuracy: Math.round(apiData.scores?.pronunciation ?? apiData.scores?.accuracy ?? 0),'use client';
 
 import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
@@ -120,7 +122,9 @@ export default function PracticePage() {
     });
 
     setSessionResult({
-      accuracy: Math.round(apiData.scores?.accuracy || 0),
+      // Azure's composite pronunciation score (folds in fluency + completeness),
+      // matching what the adaptive-difficulty logic grades progression on.
+      accuracy: Math.round(apiData.scores?.pronunciation ?? apiData.scores?.accuracy ?? 0),
       results,
     });
     setShowResults(true);

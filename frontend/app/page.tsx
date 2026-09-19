@@ -368,7 +368,9 @@ export default function RootPage() {
   const mappedChartData =
     analytics?.session_history?.map((s: any) => ({
       date: new Date(s.time_created).toLocaleDateString(undefined, { weekday: 'short' }),
-      accuracy: Math.round(s.accuracy),
+      // Azure's composite pronunciation score, matching the session ring
+      // and the dashboard history cards.
+      accuracy: Math.round(s.pronunciation ?? s.accuracy ?? 0),
     })) || [];
 
   const avgAccuracy =

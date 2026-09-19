@@ -1253,10 +1253,14 @@ async function generateReportForTeacher(
           const studentWords: Record<string, { sum: number; count: number }> = {};
 
           for (const assess of student.assessment) {
-            if (assess.accuracy !== null && assess.accuracy !== undefined) {
-              totalAccuracySum += assess.accuracy;
+            // Report on Azure's composite pronunciation score (folds in fluency +
+            // completeness), matching the session ring and dashboard chart.
+            // Fall back to accuracy for rows written before that switch.
+            const sessionScore = assess.pronunciation ?? assess.accuracy;
+            if (sessionScore !== null && sessionScore !== undefined) {
+              totalAccuracySum += sessionScore;
               totalAccuracyCount++;
-              studentAccSum += assess.accuracy;
+              studentAccSum += sessionScore;
               studentAccCount++;
             }
 

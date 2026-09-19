@@ -46,7 +46,8 @@ export function ParagraphDisplay({ paragraph }: ParagraphDisplayProps) {
               color: '#0d9488',
               fontWeight: 700,
               borderBottom: '2.5px dotted #0d9488',
-              paddingBottom: '1px',
+              padding: '0 0.18em 2px',
+              margin: '0 0.06em',
             }}
             title={`Focus: ${part.phoneme}`}
           >
@@ -90,7 +91,8 @@ export function ParagraphDisplay({ paragraph }: ParagraphDisplayProps) {
                 color: '#0d9488',
                 fontWeight: 700,
                 borderBottom: '2.5px dotted #0d9488',
-                paddingBottom: '1px',
+                padding: '0 0.18em 2px',
+                margin: '0 0.06em',
               }}
               title={`Focus: ${phoneme}`}
             >
@@ -144,7 +146,8 @@ export function ParagraphDisplay({ paragraph }: ParagraphDisplayProps) {
           color: '#1f2937',
           fontFamily: 'Inter, sans-serif',
           fontWeight: 500,
-          lineHeight: '2.1',
+          lineHeight: '2.4',
+          wordSpacing: '0.14em',
         }}
       >
         {renderText()}
