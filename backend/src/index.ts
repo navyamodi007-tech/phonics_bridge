@@ -406,7 +406,7 @@ app.post("/generate-sentence", async (req: Request, res: Response): Promise<any>
   
   try {
     const completion = await client.chat.completions.create({
-      model: "llama-3.3-70b-versatile",
+      model: "openai/gpt-oss-120b",
       messages: [
         {
           role: "system",
@@ -633,7 +633,7 @@ app.post("/pronounciation-service",upload.single('audio'),async(req:Request,res:
         const pronunciationResult = sdk.PronunciationAssessmentResult.fromResult(result);
         const detailResult = pronunciationResult.detailResult as any;
       const completion =await client.chat.completions.create({
-      model: "llama-3.3-70b-versatile",
+      model: "openai/gpt-oss-120b",
       messages: [
         {
           role: "system",
@@ -1139,7 +1139,7 @@ Always speak directly to the user. Provide practical pronunciation tips, mouth p
     ];
 
     const stream = await client.chat.completions.create({
-      model: "llama-3.3-70b-versatile",
+      model: "openai/gpt-oss-120b",
       messages: chatMessages,
       temperature: 0.7,
       max_completion_tokens: 1000,
@@ -1181,7 +1181,7 @@ async function getWordImprovementTips(words: string[]): Promise<Record<string, s
   if (!words || words.length === 0) return {};
   try {
     const completion = await client.chat.completions.create({
-      model: "llama-3.3-70b-versatile",
+      model: "openai/gpt-oss-120b",
       messages: [
         {
           role: "system",
