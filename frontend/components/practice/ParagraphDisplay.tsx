@@ -12,9 +12,18 @@ export function ParagraphDisplay({ paragraph }: ParagraphDisplayProps) {
     const text = paragraph.text;
     const targetWords = paragraph.targetWords;
 
-    const hasIndices = targetWords.every(
-      (tw) => typeof tw.startIndex === 'number' && typeof tw.endIndex === 'number'
-    );
+    // Only trust supplied offsets if they actually resolve to the word they claim
+    // to mark. Stale or off-by-one indices would otherwise slice mid-word (e.g.
+    // highlighting 'ather m' inside 'weather made'), so fall back to matching by
+    // string, which derives the positions from the text itself.
+    const hasIndices =
+      targetWords.length > 0 &&
+      targetWords.every(
+        (tw) =>
+          typeof tw.startIndex === 'number' &&
+          typeof tw.endIndex === 'number' &&
+          text.slice(tw.startIndex, tw.endIndex).toLowerCase() === tw.word.toLowerCase()
+      );
 
     if (hasIndices) {
       const parts: { text: string; isTarget: boolean; phoneme?: string }[] = [];
@@ -46,7 +55,7 @@ export function ParagraphDisplay({ paragraph }: ParagraphDisplayProps) {
               color: '#0d9488',
               fontWeight: 700,
               borderBottom: '2.5px dotted #0d9488',
-              padding: '0 0.18em 2px',
+              padding: '0 0.1em 2px',
               margin: '0 0.06em',
             }}
             title={`Focus: ${part.phoneme}`}
@@ -91,7 +100,7 @@ export function ParagraphDisplay({ paragraph }: ParagraphDisplayProps) {
                 color: '#0d9488',
                 fontWeight: 700,
                 borderBottom: '2.5px dotted #0d9488',
-                padding: '0 0.18em 2px',
+                padding: '0 0.1em 2px',
                 margin: '0 0.06em',
               }}
               title={`Focus: ${phoneme}`}

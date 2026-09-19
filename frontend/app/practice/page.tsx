@@ -41,7 +41,13 @@ export default function PracticePage() {
         if (!res.ok) throw new Error('Failed to generate sentences');
 
         const text = await res.text();
-        const data = JSON.parse(text);
+        // Reasoning models often wrap their JSON in a ```json fence or add a line
+        // of prose around it; parse the outermost JSON object rather than the
+        // whole response, so a stray wrapper doesn't drop us to the samples.
+        const start = text.indexOf('{');
+        const end = text.lastIndexOf('}');
+        if (start === -1 || end <= start) throw new Error('No JSON object in response');
+        const data = JSON.parse(text.slice(start, end + 1));
         
         if (active) {
           const formatted: PracticeParagraph[] = [
@@ -61,7 +67,13 @@ export default function PracticePage() {
               targetWords: data.focus_words_3 || [],
             },
           ];
-          setParagraphs(formatted);
+
+          // A truncated or partial generation can leave text2/text3 empty. Those
+          // are still truthy objects, so they would render as a blank card and
+          // make "Next Paragraph" look like it did nothing — drop them, and fall
+          // back to the samples only if nothing usable came back at all.
+          const usable = formatted.filter((p) => p.text.trim().length > 0);
+          setParagraphs(usable.length > 0 ? usable : practiceParagraphs);
           setIsGenerating(false);
         }
       } catch (err) {

@@ -414,7 +414,11 @@ app.post("/generate-sentence", async (req: Request, res: Response): Promise<any>
         },
       ],
       temperature: 0.7,
-      max_completion_tokens: 1200,
+      // Three paragraphs plus three focus_words arrays (each word carrying hindi
+      // and sounds_like) is a large JSON payload, and a reasoning model spends
+      // tokens thinking before it emits any. Too low a cap truncates the response
+      // mid-JSON, which surfaces as blank second/third paragraphs.
+      max_completion_tokens: 4000,
       top_p: 1,
       stream: true,
       stop: null,
@@ -1131,7 +1135,26 @@ Your goal is to help them understand their pronunciation errors, give tips on ho
 
 Keep your answers relatively concise, warm, and easy to understand (especially if talking to a student). Use phonics notations like /sh/ or /th/ when referencing sounds.
 ${performanceSummary ? `\nUse this context about the user's performance to answer their questions:\n${performanceSummary}` : ""}
-Always speak directly to the user. Provide practical pronunciation tips, mouth positioning guidance (e.g. "put your tongue between your teeth for the /th/ sound"), or encouragement.`;
+Always speak directly to the user. Provide practical pronunciation tips, mouth positioning guidance (e.g. "put your tongue between your teeth for the /th/ sound"), or encouragement.
+
+OUTPUT FORMAT - follow these rules strictly.
+The chat window renders plain text and understands ONLY two pieces of markup:
+  - **bold text**
+  - lines beginning with "- " for bullet points
+Anything else is shown to the user as raw characters and looks broken.
+
+Therefore you MUST NOT use:
+  - tables or any "|" pipe characters
+  - headings of any kind (#, ##, ###)
+  - numbered lists ("1.", "2."); write bullets with "- " instead
+  - horizontal rules (---, ***)
+  - code blocks, backticks, or blockquotes (>)
+  - emoji used as section headers or numbered badges
+
+Write in short plain sentences and keep paragraphs to 1-3 lines, separated by a
+blank line. Use "- " bullets for any list, and **bold** only to highlight a word
+or sound being practised. Keep the whole reply under about 150 words. When you
+need to show syllable stress, write it inline like **PIC**-ture, not in a table.`;
 
     const chatMessages = [
       { role: "system", content: systemPrompt },
