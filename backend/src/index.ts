@@ -281,13 +281,16 @@ function sysIns(context: string, adaptivePrompt: string) {
   Output should be in this format-
   {
     "text1": "this is the first paragraph",
-    "focus_words_1":[{"word": "word1", "phoneme": "phoneme1", "hindi": "हिन्दी phonetic breakdown", "sounds_like": "sounds · like · guide"}, ...],
+    "focus_words_1":[{"word": "word1", "phoneme": "phoneme1", "hindi": "हिन्दी phonetic breakdown", "sounds_like": "sounds · like · guide"}],
     "text2": "this is the second paragraph",  
-    "focus_words_2":[{"word": "word2", "phoneme": "phoneme2", "hindi": "हिन्दी phonetic breakdown", "sounds_like": "sounds · like · guide"}, ...],
+    "focus_words_2":[{"word": "word2", "phoneme": "phoneme2", "hindi": "हिन्दी phonetic breakdown", "sounds_like": "sounds · like · guide"}],
     "text3": "this is the third paragraph",   
-    "focus_words_3":[{"word": "word3", "phoneme": "phoneme3", "hindi": "हिन्दी phonetic breakdown", "sounds_like": "sounds · like · guide"}, ...]
+    "focus_words_3":[{"word": "word3", "phoneme": "phoneme3", "hindi": "हिन्दी phonetic breakdown", "sounds_like": "sounds · like · guide"}]
   }
   No markdown in the output. Keep it strictly as valid JSON.
+  Emit ONLY the JSON object - no code fences, no commentary before or after it.
+  Give each focus_words array 3 to 5 complete entries. Never write "..." or any
+  other placeholder in the output, and never leave a trailing comma.
   Also provide focus words for each text paragraph. For each focus word, specify:
   1. The English "word" itself.
   2. Its associated "phoneme" category (like "TH Sounds", "V/W Confusion", etc.).
@@ -419,6 +422,9 @@ app.post("/generate-sentence", async (req: Request, res: Response): Promise<any>
       // tokens thinking before it emits any. Too low a cap truncates the response
       // mid-JSON, which surfaces as blank second/third paragraphs.
       max_completion_tokens: 4000,
+      // The client parses this stream as JSON, so guarantee syntactic validity
+      // here rather than relying on the prompt alone.
+      response_format: { type: "json_object" },
       top_p: 1,
       stream: true,
       stop: null,
